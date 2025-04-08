@@ -4,7 +4,7 @@ from gemini import Gemini
 from grok import Grok
 from llama import Llama
 import time
-from startup import initial_prompt, follow_up_prompt, default_prompts
+from startup import initial_prompt, follow_up_prompt, default_prompts, question
 
 class AICouncil:
     def __init__(self, system_prompts=None, initial_prompt_template=None, follow_up_prompt_template=None):
@@ -253,5 +253,4 @@ Consider both technological and economic aspects."""
     
 if __name__ == "__main__":
     #test()
-    test = """I built a tool that uses AI agents to perform some function in Acumatica. This is the 'elevator pitch' I thought of: Imagine Acumatica where you just talk to it. \nNo clicking through menus, no endless forms. \nYou tell our master AI what you need – 'Hey, create a new customer record with these details and then generate an invoice for this order' – and BAM! It unleashes its little AI worker bees, each one laser-focused on a single task within Acumatica. They get it done, and the big AI loops you back in. It's like having an army of tiny, super-efficient assistants inside your ERP, all controlled by your voice. \nThink faster workflows, less grunt work, more brainpower for the stuff that actually matters.\n\nI keep coming back to the question - why would we ever manually input data?   Well I wrote the tool that allows Agents to interact with Acumatica via the API based on the typing or voice dictate of the user. currently, it only can create, read, update, delete Customers. I will expand it to creating Cases, Sales Orders, Contacts, etc. I need to figure out a way to implement RAG so the Agents can more meaningfully interact with the Acumatica User and get the context for requests like - create a Sales Order for Acme with their usual order.    I am most excited about this because NO ONE in the Acumatica developer space is making use of AIs. The best tools I have seen on the marketplace only allow for prompt engineering. No one is creating autonomous agents.  What would be the best steps to market, sell, and finish this project to get it rolling."""
     pass

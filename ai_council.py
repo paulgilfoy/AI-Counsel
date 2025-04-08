@@ -4,9 +4,10 @@ from gemini import Gemini
 from grok import Grok
 from llama import Llama
 import time
+from startup import initial_prompt, follow_up_prompt, default_prompts
 
 class AICouncil:
-    def __init__(self, system_prompts=None):
+    def __init__(self, system_prompts=None, initial_prompt_template=None, follow_up_prompt_template=None):
         """
         Initialize the AI Council with individual system prompts for each model
         
@@ -14,6 +15,10 @@ class AICouncil:
             system_prompts (dict, optional): Dictionary mapping model names to their system prompts.
                                            If None, no system prompts will be used.
                                            If a string is provided instead of a dict, it will be used for all models.
+            initial_prompt_template (str, optional): Template for the initial prompt. If None, a default template will be used.
+                                                   Use {topic} as a placeholder for the discussion topic.
+            follow_up_prompt_template (str, optional): Template for the follow-up prompt. If None, a default template will be used.
+                                                     Use {context} as a placeholder for the discussion context.
         """
         # Default system prompts (empty)
         default_prompts = {
@@ -45,6 +50,30 @@ class AICouncil:
         
         # Store the prompts for potential updates
         self.system_prompts = prompts
+        
+        # Set default prompt templates if not provided
+        self.initial_prompt_template = initial_prompt_template or """You are a wise member of a virtual board of directors tasked with solving complex problems. 
+        Please provide your initial thoughts on this problem: 
+        {topic}
+
+        Consider:
+        1. Key aspects of the problem that demand attention, based on your expertise.
+        2. Potential approaches or solutions, grounded in logical reasoning or examples.
+        3. Unique insights that challenge conventional assumptions or reveal overlooked opportunities.
+
+        Think from first principles, weigh short-term needs against long-term strategic impact, and bring your distinct perspective to the table. Keep your response concise (100-200 words) but thorough."""
+        
+        self.follow_up_prompt_template = follow_up_prompt_template or """You are continuing as a wise member of a virtual board of directors. Review the previous discussion:
+
+        {context}
+
+        Based on your expertise:
+        1. Analyze the perspectives shared, pinpointing areas of agreement and disagreement with clear reasoning.
+        2. Build upon or challenge specific ideas, highlighting strengths, flaws, or gaps, and offering your distinct take.
+        3. Propose next steps or refined solutions, integrating the discussion into a sharper, more actionable plan.
+        4. If your thinking has shifted, explain how and why, tying it to the group's input.
+
+        Think critically, challenge assumptions, and align your ideas with the vision. Be rigorous yet constructive, and keep your response concise (200-400 words) but thorough. Optionally, pose a question to the group to deepen the discussion."""
     
     def update_system_prompt(self, model_name, new_prompt):
         """
@@ -86,6 +115,22 @@ class AICouncil:
         """
         for model_name, prompt in new_prompts.items():
             self.update_system_prompt(model_name, prompt)
+    
+    def update_prompt_templates(self, initial_prompt_template=None, follow_up_prompt_template=None):
+        """
+        Update the prompt templates used for discussions
+        
+        Args:
+            initial_prompt_template (str, optional): New template for the initial prompt.
+                                                   Use {topic} as a placeholder for the discussion topic.
+            follow_up_prompt_template (str, optional): New template for the follow-up prompt.
+                                                     Use {context} as a placeholder for the discussion context.
+        """
+        if initial_prompt_template is not None:
+            self.initial_prompt_template = initial_prompt_template
+        
+        if follow_up_prompt_template is not None:
+            self.follow_up_prompt_template = follow_up_prompt_template
         
     def discuss_topic(self, topic, rounds=3):
         """
@@ -101,16 +146,7 @@ class AICouncil:
         discussion = []
         
         # Initial prompt for the first model
-        initial_prompt = f"""You are a wise member of a virtual board of directors tasked with solving complex problems. 
-        Please provide your initial thoughts on this problem: 
-        {topic}
-
-        Consider:
-        1. Key aspects of the problem that demand attention, based on your expertise.
-        2. Potential approaches or solutions, grounded in logical reasoning or examples.
-        3. Unique insights that challenge conventional assumptions or reveal overlooked opportunities.
-
-        Think from first principles, weigh short-term needs against long-term strategic impact, and bring your distinct perspective to the table. Keep your response concise (100-200 words) but thorough."""
+        initial_prompt = self.initial_prompt_template.format(topic=topic)
         
         # Get initial response from the first model
         first_model_name = list(self.models.keys())[0]
@@ -160,17 +196,7 @@ class AICouncil:
                     for prev_model, prev_response in round_responses.items():
                         current_context += f"\n{prev_model}: {prev_response}\n"
                 
-                follow_up_prompt = f"""You are continuing as a wise member of a virtual board of directors. Review the previous discussion:
-
-                {current_context}
-
-                Based on your expertise:
-                1. Analyze the perspectives shared, pinpointing areas of agreement and disagreement with clear reasoning.
-                2. Build upon or challenge specific ideas, highlighting strengths, flaws, or gaps, and offering your distinct take.
-                3. Propose next steps or refined solutions, integrating the discussion into a sharper, more actionable plan.
-                4. If your thinking has shifted, explain how and why, tying it to the group's input.
-
-                Think critically, challenge assumptions, and align your ideas with the vision. Be rigorous yet constructive, and keep your response concise (200-400 words) but thorough. Optionally, pose a question to the group to deepen the discussion."""
+                follow_up_prompt = self.follow_up_prompt_template.format(context=current_context)
                 
                 response = model.get_response(follow_up_prompt)
                 round_responses[model_name] = response
@@ -192,28 +218,28 @@ Consider both technological and economic aspects."""
     # Define individual system prompts for each model
     system_prompts = {
         'ChatGPT': """You are participating in a collaborative discussion with other AI models.
-Your goal is to contribute unique insights while building upon others' ideas.
-Be constructive, specific, and focus on practical solutions.""",
-        
+        Your goal is to contribute unique insights while building upon others' ideas.
+        Be constructive, specific, and focus on practical solutions.""",
+                
         'Claude': """You are participating in a collaborative discussion with other AI models.
-Your goal is to contribute unique insights while building upon others' ideas.
-Be constructive, specific, and focus on practical solutions.
-As Claude, you have particular expertise in ethical considerations.""",
-        
+        Your goal is to contribute unique insights while building upon others' ideas.
+        Be constructive, specific, and focus on practical solutions.
+        As Claude, you have particular expertise in ethical considerations.""",
+                
         'Gemini': """You are participating in a collaborative discussion with other AI models.
-Your goal is to contribute unique insights while building upon others' ideas.
-Be constructive, specific, and focus on practical solutions.
-As Gemini, you have particular expertise in multimodal analysis.""",
-        
+        Your goal is to contribute unique insights while building upon others' ideas.
+        Be constructive, specific, and focus on practical solutions.
+        As Gemini, you have particular expertise in multimodal analysis.""",
+                
         'Grok': """You are participating in a collaborative discussion with other AI models.
-Your goal is to contribute unique insights while building upon others' ideas.
-Be constructive, specific, and focus on practical solutions.
-As Grok, you have particular expertise in humor and unconventional approaches.""",
-        
+        Your goal is to contribute unique insights while building upon others' ideas.
+        Be constructive, specific, and focus on practical solutions.
+        As Grok, you have particular expertise in humor and unconventional approaches.""",
+                
         'Llama': """You are participating in a collaborative discussion with other AI models.
-Your goal is to contribute unique insights while building upon others' ideas.
-Be constructive, specific, and focus on practical solutions.
-As Llama, you have particular expertise in open-source approaches."""
+        Your goal is to contribute unique insights while building upon others' ideas.
+        Be constructive, specific, and focus on practical solutions.
+        As Llama, you have particular expertise in open-source approaches."""
     }
     
     # Initialize with individual prompts

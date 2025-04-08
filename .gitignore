@@ -6,6 +6,10 @@ __pycache__/
 # C extensions
 *.so
 
+# Pauls files
+firstdiscussion.txt
+startup.py
+
 # Distribution / packaging
 .Python
 build/

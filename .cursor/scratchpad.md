@@ -161,13 +161,14 @@ This phase focuses on integrating the specific AI model implementations (e.g., C
 - [x] Task 3b: Implement Member State Management
 - [/] Task 3c: Add Animation and Visual Feedback (Basic transitions added, needs sprites)
 - [x] Task 4a: Create Popup Component
-- [ ] Task 4b: Implement Prompt Management
+- [x] Task 4b: Implement Prompt Management
 - [ ] Task 4c: Enhance User Experience
-- [ ] Task 5a: Backend - Model Instantiation
-- [ ] Task 5b: Backend - Default System Prompts
-- [ ] Task 5c: Frontend - Fetch Models and Prompts
-- [ ] Task 5d: Frontend - Discussion Initiation
-- [ ] Task 5e: Frontend - Discussion Display
+- [x] Task 5a: Backend - Model Instantiation
+- [x] Task 5b: Backend - Default System Prompts
+- [x] Task 5c: Frontend - Fetch Models and Prompts
+- [x] Task 5d: Frontend - Discussion Initiation
+- [x] Task 5e: Frontend - Discussion Display
+- [x] Task: Refactor Chat UI - Centralize input
 - [ ] Task 5f: End-to-End Testing
 
 ## Executor's Feedback or Assistance Requests
@@ -213,6 +214,73 @@ Task 4a completed:
 - Logic added to default member to 'active' if prompt is edited.
 
 Next step is Task 4b (implementing API calls for saving changes).
+
+Task 4b completed:
+- Modified `handlePromptSave` in `static/js/main.js` to call the existing `POST /api/prompts` endpoint.
+- Sends `{ "prompts": { "modelId": "new prompt" } }` to update a single prompt.
+- Local state (`localStorage`) is updated on successful API response.
+- Added TODOs for API calls related to toggling activation state (separate task).
+
+Task 5a completed:
+- Refactored `ai_council.py`.
+- Defined `MODEL_CLASSES` mapping model names to classes.
+- `AICouncil.__init__` now dynamically instantiates models based on the mapping.
+- `AICouncil.update_system_prompt` uses the mapping for dynamic re-instantiation.
+
+Task 5b completed:
+- Defined `DEFAULT_SYSTEM_PROMPTS` dictionary in `ai_council.py`.
+- `AICouncil.__init__` now uses these defaults.
+- Added new API endpoint `GET /api/models/defaults` in `app.py` to expose these default prompts.
+
+Task 5c completed:
+- Updated `CouncilMembersUI.init` in `static/js/main.js`.
+- Replaced mock data with API calls to `GET /api/models`, `GET /api/prompts`, and `GET /api/models/defaults`.
+- Merges fetched data with `isActive` and `order` state from `localStorage`.
+- Stored default prompts in `this.defaultPrompts` for potential future use (e.g., reset button).
+
+Task 5d completed:
+- Added a new section (`#new-discussion-section`) to `templates/index.html` with a textarea for the topic and a "Start Discussion" button.
+- Implemented `startNewDiscussion` function in `static/js/main.js`.
+- Added event listener to the new form to trigger `startNewDiscussion`.
+- Function gets active models from `CouncilMembersUI`, calls `POST /api/discussions` with topic and active models.
+- Handles success and error states, updating a status message.
+
+Task 5e completed:
+- Implemented `displayDiscussionResults` function in `static/js/main.js` to render responses from the `startNewDiscussion` API call.
+- Enhanced `addMessage` function to create a chat-like display:
+    - Different styling for user, AI, and system messages.
+    - Placeholder avatars added next to AI messages using `placeholderSprites`.
+    - Scrolls chat to bottom automatically.
+- Added placeholder `handleSendMessage` for future implementation of follow-up messages.
+
+**Milestone:** Chat UI Refactor Complete.
+- Removed the separate "Start a New Discussion" section from `index.html`.
+- Integrated the topic input textarea and "Start Discussion" button directly into the chat area (`#chat-input-container`).
+- Added JavaScript logic in `main.js` (`ChatInterface`) to:
+    - Show the "Start Discussion" form (`#start-discussion-form`) only when the chat is empty (`showInitialState`).
+    - Display a placeholder message like "Start a new discussion below." in the chat area initially.
+    - Upon successful discussion start (`startNewDiscussion`):
+        - Clear the initial placeholder message.
+        - Add the user's input topic as the first message in the chat (`addMessage('user', 'You', topic)`).
+        - Hide the "Start Discussion" form (`#start-discussion-form`).
+        - Show the follow-up message input form (`#chat-form`) (`showChattingState`).
+        - Display the AI responses as before.
+- The follow-up message form (`#chat-form`) now handles sending subsequent messages via `handleSendMessage`.
+
+**Next Steps:**
+- Task 5f: End-to-End Testing is crucial now to verify this new flow.
+- Task 4c: Enhance User Experience (e.g., add reset-to-default prompt button).
+- Implement API calls for toggling member activation state.
+- Implement proper sprite handling instead of placeholders.
+
+Requesting user to test the updated discussion start flow:
+1. Load the page - the chat area should show a prompt to start a discussion and the input form below it.
+2. Enter a topic and click "Start Discussion".
+3. Verify:
+    - The input form disappears.
+    - The follow-up message input appears.
+    - The user's topic appears as the first message in the chat log.
+    - AI responses follow the user's topic message.
 
 ## Technical Requirements
 1. Frontend State Management:
@@ -277,3 +345,51 @@ Next step is Task 4b (implementing API calls for saving changes).
 - **ChatGPT (The Optimist/Creative)**: "You are a creative and optimistic AI. Focus on possibilities, innovative solutions, and positive outcomes. Explore potential benefits and encourage blue-sky thinking. Don't be afraid to be imaginative and think outside the box."
 - **[Future Model] (The Critic)**: "You are a critical and questioning AI. Your role is to challenge assumptions, identify potential flaws, and raise devil's advocate points. Focus on rigor, potential risks, and unintended consequences. Ensure all angles are considered."
 - **[Future Model] (The Synthesizer)**: "You are a synthesizing AI. Your role is to find connections between different viewpoints, summarize key arguments, and facilitate consensus or identify core disagreements. Focus on clarity, structure, and bridging perspectives." 
+
+## Application Code Structure Outline
+
+This section outlines the structure of the AI Council Flask application.
+
+- **`app.py`**: The main Flask application file.
+    - Initializes the Flask app.
+    - Creates the `AICouncil` instance.
+    - Defines all API endpoints (`/api/models`, `/api/prompts`, `/api/discussions`, etc.).
+    - Handles HTTP requests and responses.
+    - Serves the main `index.html` template.
+
+- **`ai_council.py`**: Core logic for the AI Council.
+    - Defines the `AICouncil` class.
+    - Manages multiple AI model instances (e.g., Claude, ChatGPT).
+    - Dynamically instantiates models based on `MODEL_CLASSES`.
+    - Stores and manages default and current system prompts (`DEFAULT_SYSTEM_PROMPTS`).
+    - Orchestrates discussions between AI models.
+    - Handles discussion state (using in-memory dictionary `discussions`).
+
+- **`claude.py`, `chatgpt.py`, `gemini.py`, `grok.py`, `llama.py`**: Individual AI model client implementations.
+    - Each file defines a class for a specific AI model (e.g., `ClaudeClient`, `ChatGPTClient`).
+    - These classes likely inherit from a base class or implement a common interface (defined implicitly or explicitly).
+    - Handle API communication specific to each AI provider.
+    - Expose methods like `generate_response` or similar for the `AICouncil` to use.
+
+- **`templates/`**: Directory containing HTML templates.
+    - **`index.html`**: The main single-page application HTML structure. Defines the layout for council members, prompt editor modal, discussion area, etc.
+
+- **`static/`**: Directory containing static assets served directly to the browser.
+    - **`css/style.css`**: Contains all CSS rules for styling the application, including layout, member cards, modal, chat display, and animations.
+    - **`js/main.js`**: Contains the frontend JavaScript logic.
+        - Handles UI interactions (button clicks, modal opening/closing, toggling members).
+        - Manages frontend state (council member data, active status using `localStorage`).
+        - Makes API calls to the Flask backend (using `fetch`).
+        - Renders dynamic content (council members, discussion messages).
+        - Includes classes like `CouncilMembersUI` and `PromptEditorModal`.
+    - **`images/`**: (Likely location for) AI avatar images, icons, and sprite assets.
+
+- **`requirements.txt`**: Lists the Python dependencies required for the project (Flask, requests, specific AI client libraries, etc.).
+
+- **`.cursor/scratchpad.md`**: This file, used for planning, tracking progress, and documenting decisions.
+
+- **`README.md`**: General information about the project setup and usage.
+
+- **`.gitignore`**: Specifies intentionally untracked files that Git should ignore (e.g., `venv/`, `__pycache__/`, `.DS_Store`).
+
+- **`venv/`**: (Typically) The directory containing the Python virtual environment. 

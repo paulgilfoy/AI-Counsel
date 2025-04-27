@@ -21,7 +21,16 @@ discussions = {}
 
 # Get list of available models
 def get_available_models():
-    return list(ai_council.models.keys())
+    # Use the keys from the dynamic model loading
+    return list(ai_council.models.keys()) # Returns keys of successfully initialized models
+
+# Get default prompts
+def get_default_prompts():
+    # Import or access the defaults defined in ai_council.py
+    from ai_council import DEFAULT_SYSTEM_PROMPTS
+    # Filter defaults to only include models that are currently recognized/available
+    available_models = get_available_models()
+    return {name: prompt for name, prompt in DEFAULT_SYSTEM_PROMPTS.items() if name in available_models}
 
 @app.route('/')
 def home():
@@ -86,6 +95,17 @@ def get_models():
     return jsonify({
         'status': 'success',
         'models': model_names
+    })
+
+@app.route('/api/models/defaults', methods=['GET'])
+def get_model_defaults():
+    """
+    Get the default system prompts for available models
+    """
+    default_prompts = get_default_prompts()
+    return jsonify({
+        'status': 'success',
+        'defaults': default_prompts
     })
 
 @app.route('/api/prompts', methods=['GET'])

@@ -19,26 +19,51 @@
         <main class="flex justify-center">
             <!-- Chat Area -->
             <div class="w-full max-w-4xl px-4">
-                <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
-                    <div id="chat-container" class="mb-6 min-h-[400px] max-h-[600px] overflow-y-auto">
-                        <!-- Chat messages will appear here -->
+                <div class="bg-gray-800 rounded-lg p-6 shadow-lg flex flex-col min-h-[500px]">
+                    <!-- Chat Messages Container -->
+                    <div id="chat-messages" class="flex-1 mb-6 min-h-[400px] max-h-[600px] overflow-y-auto">
+                        <!-- Messages will appear here -->
+                        <!-- Initial state message can be added via JS if needed -->
                     </div>
 
-                    <form id="chat-form" class="flex flex-col sm:flex-row gap-4">
-                        <input 
-                            type="text" 
-                            id="user-input" 
-                            class="flex-1 bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="Type your message here..."
-                            required
-                        >
-                        <button 
-                            type="submit" 
-                            class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-lg font-medium transition-colors"
-                        >
-                            Send
-                        </button>
-                    </form>
+                    <!-- Input Area Container -->
+                    <div id="chat-input-container">
+                        <!-- Initial Discussion Input Form (Initially Visible or controlled by JS) -->
+                        <form id="start-discussion-form" class="flex flex-col sm:flex-row gap-4">
+                             <textarea 
+                                id="discussion-topic-input" 
+                                rows="3" 
+                                class="flex-1 bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="Enter the topic or question you want the council to discuss..."
+                                required
+                            ></textarea>
+                            <button 
+                                type="submit" 
+                                id="start-discussion-button" 
+                                class="w-full sm:w-auto bg-green-600 hover:bg-green-700 px-6 py-2 rounded-lg font-medium transition-colors"
+                            >
+                                Start Discussion
+                            </button>
+                        </form>
+                         <div id="start-discussion-status" class="mt-3 text-sm text-gray-400"></div>
+
+                        <!-- Follow-up Message Input Form (Initially Hidden) -->
+                        <form id="chat-form" class="flex flex-col sm:flex-row gap-4" style="display: none;">
+                            <input 
+                                type="text" 
+                                id="user-input" 
+                                class="flex-1 bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="Type your message here..."
+                                required
+                            >
+                            <button 
+                                type="submit" 
+                                class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-lg font-medium transition-colors"
+                            >
+                                Send
+                            </button>
+                        </form>
+                    </div>
                 </div>
             </div>
         </main>

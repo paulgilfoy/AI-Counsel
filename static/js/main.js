@@ -106,15 +106,70 @@ class CouncilMembersUI {
     }
 
     async init() {
-        this.loadState();
-        if (this.members.length === 0) {
-            // Load initial data if no state saved
-            // In real app, fetch from /api/council-members
-            this.members = mockCouncilMembers.map((m, index) => ({ ...m, order: index }));
-            this.saveState();
-        }
+        await this.loadCouncilData(); // Fetch data from API instead of mock/localStorage
         this.render();
         this.setupEventListeners();
+    }
+
+    async loadCouncilData() {
+        try {
+            console.log("Fetching council data...");
+            const [modelsRes, currentPromptsRes, defaultPromptsRes] = await Promise.all([
+                fetch('/api/models'),
+                fetch('/api/prompts'),
+                fetch('/api/models/defaults')
+            ]);
+
+            if (!modelsRes.ok || !currentPromptsRes.ok || !defaultPromptsRes.ok) {
+                throw new Error('Failed to fetch council data from API');
+            }
+
+            const modelsData = await modelsRes.json();
+            const currentPromptsData = await currentPromptsRes.json();
+            const defaultPromptsData = await defaultPromptsRes.json();
+
+            const models = modelsData.models || []; // ['ChatGPT', 'Claude', ...]
+            const currentPrompts = currentPromptsData.prompts || {}; // { 'ChatGPT': 'current prompt', ... }
+            this.defaultPrompts = defaultPromptsData.defaults || {}; // Store defaults { 'ChatGPT': 'default prompt', ... }
+
+            // Try loading saved state (isActive, order) from localStorage
+            const savedState = localStorage.getItem('councilMembersState');
+            let persistedState = {};
+            if (savedState) {
+                try {
+                    persistedState = JSON.parse(savedState).reduce((acc, member) => {
+                        acc[member.id] = { isActive: member.isActive, order: member.order };
+                        return acc;
+                    }, {});
+                } catch (e) {
+                    console.error("Failed to parse saved state:", e);
+                    localStorage.removeItem('councilMembersState'); // Clear corrupted state
+                }
+            }
+
+            this.members = models.map((modelId, index) => {
+                const state = persistedState[modelId] || {}; // Get saved state or empty object
+                return {
+                    id: modelId,
+                    name: modelId, // Use ID as name for now, could enhance API later
+                    provider: "Unknown", // Add provider info to API later if needed
+                    // Use current prompt from API, fallback to default if missing
+                    systemPrompt: currentPrompts[modelId] !== undefined ? currentPrompts[modelId] : this.defaultPrompts[modelId],
+                    isActive: state.isActive !== undefined ? state.isActive : true, // Default to active if no saved state
+                    order: state.order !== undefined ? state.order : index, // Use saved order or default index
+                    // sprite: TBD - assign based on name or get from API
+                };
+            });
+
+            console.log("Council data loaded:", this.members);
+            this.saveState(); // Save the potentially merged/updated state
+
+        } catch (error) {
+            console.error('Failed to initialize council members UI:', error);
+            this.gridContainer.innerHTML = '<p class="error">Failed to load council members. Please try refreshing.</p>';
+            // Fallback to empty or mock data if needed?
+            this.members = []; // Set to empty on error
+        }
     }
 
     loadState() {
@@ -261,45 +316,72 @@ class CouncilMembersUI {
         }, 300); // Match CSS transition duration
     }
 
-    handlePromptSave() {
+    async handlePromptSave() {
         const memberId = this.modalMemberId.value;
-        const newPrompt = this.modalSystemPrompt.value;
-        // Read the state the user *left* the indicator in
-        let newActiveState = this.modalStatusIndicator.classList.contains('active');
-
+        const newPromptText = this.modalSystemPrompt.value;
         const memberIndex = this.members.findIndex(m => m.id === memberId);
-        if (memberIndex !== -1) {
-            let stateChanged = false;
-            const originalPrompt = this.members[memberIndex].systemPrompt;
-            const originalActiveState = this.members[memberIndex].isActive;
+        const modalIsActive = this.modalStatusIndicator.classList.contains('active');
 
-            // Check if prompt changed
-            if (originalPrompt !== newPrompt) {
-                this.members[memberIndex].systemPrompt = newPrompt;
-                // Default to active if prompt was edited
-                newActiveState = true; 
-                console.log(`Updated prompt for ${memberId}, defaulting to active.`);
-                stateChanged = true;
-            }
+        if (memberIndex === -1) {
+            console.error("Member not found:", memberId);
+            this.closePromptModal();
+            return;
+        }
 
-            // Check if active state changed (either by user toggle or default above)
-            if (originalActiveState !== newActiveState) {
-                this.members[memberIndex].isActive = newActiveState;
-                // TODO: API call
-                console.log(`Toggled active state for ${memberId} to ${newActiveState}`);
-                stateChanged = true;
-            } else if (stateChanged && !newActiveState) {
-                // If prompt changed but user explicitly set to inactive, ensure it's saved
-                this.members[memberIndex].isActive = false;
-                console.log(`Prompt updated for ${memberId}, but kept inactive as requested.`);
-            }
+        const originalMember = this.members[memberIndex];
+        const promptChanged = originalMember.systemPrompt !== newPromptText;
+        const statusChanged = originalMember.isActive !== modalIsActive;
 
-            if (stateChanged) {
-                this.saveState();
-                this.render(); // Re-render
+        // 1. Save Prompt via API if it changed
+        if (promptChanged) {
+            try {
+                console.log(`Updating prompt for ${memberId}...`);
+                const response = await fetch('/api/prompts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ prompts: { [memberId]: newPromptText } }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+                }
+
+                console.log(`Prompt for ${memberId} updated successfully.`);
+                // Update local state only after successful API call
+                this.members[memberIndex].systemPrompt = newPromptText;
+
+            } catch (error) {
+                console.error('Failed to save prompt:', error);
+                alert(`Error saving prompt: ${error.message}`);
+                // Optionally, don't close the modal or revert changes on error
+                return; // Stop processing if prompt save fails
             }
         }
 
+        // 2. Handle Activation State Change if it changed
+        if (statusChanged) {
+            // This logic already exists in toggleCardActivation, reuse or call it
+            // For now, update local state directly and add TODO for API call
+            this.members[memberIndex].isActive = modalIsActive;
+            // TODO: Implement API call in toggleCardActivation (e.g., POST /api/council-members/{id}/toggle)
+            // For now, just log it
+            console.log(`Status for ${memberId} changed to ${modalIsActive} in modal. API call needed.`);
+        }
+        
+        // If the prompt was edited, default member to active if it wasn't already
+        if (promptChanged && !originalMember.isActive && !modalIsActive) {
+             console.log(`Prompt edited for inactive member ${memberId}. Setting to active.`);
+             this.members[memberIndex].isActive = true;
+             // TODO: This state change also needs an API call
+             console.log(`Status for ${memberId} implicitly changed to active. API call needed.`);
+        }
+
+        // 3. Save state locally and re-render
+        this.saveState(); // Save combined changes (prompt + potential status)
+        this.render();
         this.closePromptModal();
     }
 }
@@ -307,97 +389,240 @@ class CouncilMembersUI {
 // Chat Interface (modified to use CouncilMembersUI for active members)
 class ChatInterface {
     constructor(councilMembersUI) { // Changed constructor parameter
-        this.councilMembersUI = councilMembersUI; // Store reference
-        this.chatContainer = document.getElementById('chat-container');
-        this.chatForm = document.getElementById('chat-form');
+        this.chatMessages = document.getElementById('chat-messages');
+        this.startDiscussionForm = document.getElementById('start-discussion-form');
+        this.discussionTopicInput = document.getElementById('discussion-topic-input');
+        this.startDiscussionButton = document.getElementById('start-discussion-button');
+        this.startDiscussionStatus = document.getElementById('start-discussion-status');
+        this.chatForm = document.getElementById('chat-form'); // Follow-up form
         this.userInput = document.getElementById('user-input');
+        this.sendButton = this.chatForm.querySelector('button[type="submit"]'); // Adjust if needed
+        this.councilMembersUI = councilMembersUI; // Store reference
+        this.currentDiscussionId = null;
+
+        this.placeholderSprites = ["grok1.jpeg", "gemini3.jpeg", "gemini2.jpeg", "Gemini1.jpeg", "chatgpt1.webp", "grok4.jpeg"]; // Keep placeholder list
+
         this.setupEventListeners();
+        this.showInitialState(); // Show start form initially
     }
 
     setupEventListeners() {
-        this.chatForm.addEventListener('submit', async (e) => {
+        // Listener for the initial discussion form
+        this.startDiscussionForm.addEventListener('submit', (e) => {
             e.preventDefault();
-            const message = this.userInput.value.trim();
-            if (!message) return;
-
-            this.addMessage('user', 'You', message);
-            this.userInput.value = '';
-
-            // Get active models from CouncilMembersUI
-            const activeModels = this.councilMembersUI.members
-                .filter(m => m.isActive)
-                .map(m => m.id);
-
-            if (activeModels.length === 0) {
-                this.addMessage('system', 'System', 'No council members are active. Please activate at least one.');
-                return;
-            }
-
-            try {
-                // Pass active_models to the API
-                const response = await this.sendMessage(message, activeModels);
-                
-                // Update character state (if AICouncilUI is still used elsewhere)
-                // response.forEach(reply => {
-                //     if (this.aiCouncil) { // Check if aiCouncil exists
-                //         this.aiCouncil.updateCharacterState(reply.model_id, 'speaking');
-                //         setTimeout(() => {
-                //             this.aiCouncil.updateCharacterState(reply.model_id, 'idle');
-                //         }, 1000); 
-                //     }
-                //     this.addMessage('ai', reply.model_name, reply.content);
-                // });
-                // Simplified message display for now
-                response.forEach(reply => {
-                     this.addMessage('ai', reply.model_name, reply.content);
-                 });
-
-            } catch (error) {
-                console.error('Failed to send message:', error);
-                this.addMessage('system', 'System', 'Failed to send message. Please try again.');
+            const topic = this.discussionTopicInput.value.trim();
+            if (topic) {
+                this.startNewDiscussion(topic);
             }
         });
+
+        // Listener for the follow-up message form
+        this.chatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.handleSendMessage();
+        });
+    }
+
+    showInitialState() {
+        this.chatMessages.innerHTML = '<p class="text-center text-gray-500">Start a new discussion below.</p>'; // Placeholder message
+        this.startDiscussionForm.style.display = 'flex'; // Show start form
+        this.startDiscussionStatus.style.display = 'block'; // Show status for start form
+        this.chatForm.style.display = 'none'; // Hide follow-up form
+        this.currentDiscussionId = null;
+    }
+
+    showChattingState() {
+        this.startDiscussionForm.style.display = 'none'; // Hide start form
+        this.startDiscussionStatus.style.display = 'none'; // Hide status for start form
+        this.chatForm.style.display = 'flex'; // Show follow-up form
+    }
+
+    setStartDiscussionStatus(message, isError = false) {
+        this.startDiscussionStatus.textContent = message;
+        this.startDiscussionStatus.className = `mt-3 text-sm ${isError ? 'text-red-400' : 'text-gray-400'}`;
+    }
+
+    async startNewDiscussion(topic) {
+        console.log(`Starting new discussion with topic: ${topic}`);
+        this.setStartDiscussionStatus('Starting discussion...', false);
+        this.startDiscussionButton.disabled = true;
+        this.discussionTopicInput.disabled = true;
+
+        // 1. Get active models from CouncilMembersUI
+        const activeModels = this.councilMembersUI.getActiveMemberIds();
+        if (activeModels.length === 0) {
+            this.setStartDiscussionStatus('Error: Please activate at least one council member.', true);
+            this.startDiscussionButton.disabled = false;
+            this.discussionTopicInput.disabled = false;
+            return;
+        }
+        console.log('Active models:', activeModels);
+
+        try {
+            // 2. Call API to start discussion
+            const response = await fetch('/api/discussions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    topic: topic,
+                    active_models: activeModels
+                }),
+            });
+
+            const data = await response.json();
+            console.log('API Response:', data);
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to start discussion');
+            }
+
+            // 3. Clear initial message and add user's topic
+            this.chatMessages.innerHTML = ''; // Clear the 'Start a new discussion' placeholder
+            this.addMessage('user', 'You', topic); 
+
+            // 4. Display results
+            this.currentDiscussionId = data.discussion_id;
+            this.displayDiscussionResults(data.results);
+
+            // 5. Update UI state
+            this.setStartDiscussionStatus('Discussion started successfully.', false);
+            this.discussionTopicInput.value = ''; // Clear the input
+            this.showChattingState(); // Switch to follow-up input
+
+        } catch (error) {
+            console.error('Error starting discussion:', error);
+            this.setStartDiscussionStatus(`Error: ${error.message}`, true);
+        } finally {
+            // Re-enable the form elements in case of error, but keep disabled if successful
+            if (this.startDiscussionForm.style.display !== 'none') {
+                 this.startDiscussionButton.disabled = false;
+                 this.discussionTopicInput.disabled = false;
+            }
+        }
+    }
+
+    displayDiscussionResults(results) {
+        console.log('Displaying discussion results:', results);
+        if (!results || results.length === 0) {
+            // Handle cases where the API might return empty results initially
+            // Maybe add a system message? 
+            this.addMessage('system', 'System', 'Waiting for responses...');
+            return;
+        }
+        // Assuming results is an array of message objects like: 
+        // [{ role: 'assistant', name: 'ModelName', content: '...' }, ...]
+        // Or potentially nested rounds
+        results.forEach(message => {
+            if (message.role === 'assistant' && message.name && message.content) {
+                 this.addMessage('ai', message.name, message.content);
+            } else if (message.role === 'user' && message.content) {
+                // Might not receive user messages back in initial results, but handle if we do
+                this.addMessage('user', 'You', message.content);
+            } else {
+                 console.warn("Received unknown message format: ", message);
+                 this.addMessage('system', 'System', `Received message from ${message.name || 'Unknown'}`);
+            }
+        });
+    }
+
+    async handleSendMessage() {
+        const messageContent = this.userInput.value.trim();
+        if (!messageContent || !this.currentDiscussionId) {
+            console.log("Cannot send message: Empty content or no active discussion.");
+            return; // Don't send empty messages or if no discussion is active
+        }
+
+        console.log(`Sending message: ${messageContent} to discussion ${this.currentDiscussionId}`);
+
+        // 1. Add user message immediately to UI
+        this.addMessage('user', 'You', messageContent);
+        this.userInput.value = ''; // Clear input field
+        this.sendButton.disabled = true;
+        this.userInput.disabled = true;
+
+        try {
+            // 2. Call API to contribute to the discussion
+             const response = await fetch(`/api/discussions/${this.currentDiscussionId}/contribute`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ contribution: messageContent }),
+            });
+
+            const data = await response.json();
+            console.log('API Response for contribution:', data);
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to send message');
+            }
+
+            // 3. Display new AI responses
+            if (data.results) {
+                 this.displayDiscussionResults(data.results); // Display the new round of AI responses
+            } else {
+                 this.addMessage('system', 'System', 'Received confirmation, waiting for next round...');
+            }
+
+        } catch (error) {
+            console.error('Error sending message:', error);
+            this.addMessage('system', 'System', `Error sending message: ${error.message}`);
+            // Optional: Re-enable input on error or add the failed message back?
+        } finally {
+            this.sendButton.disabled = false;
+            this.userInput.disabled = false;
+             this.userInput.focus(); // Set focus back to input
+        }
     }
 
     addMessage(type, author, content) {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${type}`;
-        
-        const authorDiv = document.createElement('div');
-        authorDiv.className = 'author';
-        authorDiv.textContent = author;
-        
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'content';
-        // Basic markdown rendering (bold and italic)
-        content = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-        content = content.replace(/\*(.*?)\*/g, '<em>$1</em>');
-        contentDiv.innerHTML = content; // Use innerHTML to render basic markdown
-        
-        messageDiv.appendChild(authorDiv);
-        messageDiv.appendChild(contentDiv);
-        this.chatContainer.appendChild(messageDiv);
-        this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
-    }
+        console.log(`Adding message - Type: ${type}, Author: ${author}, Content: ${content.substring(0, 50)}...`);
+        const messageElement = document.createElement('div');
+        messageElement.classList.add('chat-message', `message-${type}`); // type: 'user', 'ai', 'system'
 
-    // Modified sendMessage to include active_models
-    async sendMessage(message, activeModels) {
-        const response = await fetch('/api/discussions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            // Send message and active_models list
-            body: JSON.stringify({ message, active_models: activeModels }), 
-        });
+        let authorHtml = '';
+        let contentHtml = `<div class="message-content">${content.replace(/\n/g, '<br>')}</div>`; // Basic formatting
 
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-            throw new Error(`Failed to send message: ${errorData.detail || response.statusText}`);
+        if (type === 'ai') {
+            const spriteFilename = this._getMemberSprite(author);
+            const spriteUrl = spriteFilename ? `/static/images/${spriteFilename}` : '/static/images/ai_placeholder.png'; // Fallback placeholder
+            authorHtml = `
+                <div class="message-author flex items-center mb-1">
+                    <img src="${spriteUrl}" alt="${author} avatar" class="w-6 h-6 rounded-full mr-2">
+                    <span class="font-medium">${author}</span>
+                </div>`;
+        } else if (type === 'user') {
+            authorHtml = `
+                <div class="message-author flex items-center justify-end mb-1">
+                    <span class="font-medium mr-2">${author}</span>
+                    <img src="/static/images/user_placeholder.png" alt="User avatar" class="w-6 h-6 rounded-full">
+                </div>`;
+        } else { // system
+             authorHtml = `
+                <div class="message-author flex items-center mb-1">
+                     <span class="font-medium text-gray-500 italic">${author}</span>
+                 </div>`;
         }
+        
+        messageElement.innerHTML = authorHtml + contentHtml;
 
-        return response.json();
+        this.chatMessages.appendChild(messageElement);
+        this.chatMessages.scrollTop = this.chatMessages.scrollHeight; // Scroll to bottom
     }
+
+    // Helper to get sprite (assuming councilMembersUI has the mapping)
+    _getMemberSprite(memberId) {
+        const member = this.councilMembersUI.getMemberById(memberId);
+        // Use placeholder sprite based on index, cycling through available images
+        const index = this.councilMembersUI.members.findIndex(m => m.id === memberId);
+        return this.placeholderSprites[index % this.placeholderSprites.length] || null;
+        // return member ? member.sprite : null; // Replace with actual sprite logic when available
+    }
+
+    // TODO: Implement /api/discussions/<id>/continue endpoint handling if needed
+    // async continueDiscussion() { ... }
 }
 
 // Initialize the application

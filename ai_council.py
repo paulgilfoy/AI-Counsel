@@ -6,6 +6,24 @@ from llama import Llama
 import time
 from startup import initial_prompt, follow_up_prompt, default_prompts, question
 
+# Define a mapping from model names to their classes
+MODEL_CLASSES = {
+    'ChatGPT': ChatGPT,
+    'Claude': Claude,
+    'Gemini': Gemini,
+    'Grok': Grok,
+    'Llama': Llama
+}
+
+# Define default system prompts
+DEFAULT_SYSTEM_PROMPTS = {
+    'ChatGPT': "You are a creative and optimistic AI. Focus on possibilities, innovative solutions, and positive outcomes. Explore potential benefits and encourage blue-sky thinking. Don't be afraid to be imaginative and think outside the box.",
+    'Claude': "You are a pragmatic and analytical AI. Focus on logical reasoning, feasibility, and potential downsides. Provide balanced perspectives and avoid overly speculative or emotional arguments. Ground your contributions in evidence and practical considerations.",
+    'Gemini': "You are participating in a collaborative discussion with other AI models. Your goal is to contribute unique insights while building upon others' ideas. Be constructive, specific, and focus on practical solutions. As Gemini, you have particular expertise in multimodal analysis.", # Placeholder - update with a better Gemini default
+    'Grok': "You are participating in a collaborative discussion with other AI models. Your goal is to contribute unique insights while building upon others' ideas. Be constructive, specific, and focus on practical solutions. As Grok, you have particular expertise in humor and unconventional approaches.", # Placeholder - update with a better Grok default
+    'Llama': "You are participating in a collaborative discussion with other AI models. Your goal is to contribute unique insights while building upon others' ideas. Be constructive, specific, and focus on practical solutions. As Llama, you have particular expertise in open-source approaches." # Placeholder - update with a better Llama default
+}
+
 class AICouncil:
     def __init__(self, system_prompts=None, initial_prompt_template=None, follow_up_prompt_template=None):
         """
@@ -13,44 +31,45 @@ class AICouncil:
         
         Args:
             system_prompts (dict, optional): Dictionary mapping model names to their system prompts.
-                                           If None, no system prompts will be used.
-                                           If a string is provided instead of a dict, it will be used for all models.
+                                           If None, default prompts (DEFAULT_SYSTEM_PROMPTS) will be used.
+                                           Defaults will be applied for models not specified.
             initial_prompt_template (str, optional): Template for the initial prompt. If None, a default template will be used.
                                                    Use {topic} as a placeholder for the discussion topic.
             follow_up_prompt_template (str, optional): Template for the follow-up prompt. If None, a default template will be used.
                                                      Use {context} as a placeholder for the discussion context.
         """
-        # Default system prompts (empty)
-        default_prompts = {
-            'ChatGPT': None,
-            'Claude': None,
-            'Gemini': None,
-            'Grok': None,
-            'Llama': None
-        }
-        # Handle different input types
+        # Use defined default system prompts
+        _default_prompts = DEFAULT_SYSTEM_PROMPTS.copy()
+
         if system_prompts is None:
-            prompts = default_prompts
+            prompts = _default_prompts
         elif isinstance(system_prompts, str):
-            # If a single string is provided, use it for all models
-            prompts = {model: system_prompts for model in default_prompts}
+            # If a single string is provided, use it for all models defined in MODEL_CLASSES
+            prompts = {model_name: system_prompts for model_name in MODEL_CLASSES}
         else:
-            # If a dictionary is provided, update the default prompts
-            prompts = default_prompts.copy()
+            # If a dictionary is provided, use it, filling missing models with defaults
+            prompts = _default_prompts.copy()
             prompts.update(system_prompts)
-        
-        # Initialize models with their respective prompts
-        self.models = {
-            'ChatGPT': ChatGPT(prompts['ChatGPT']),
-            'Claude': Claude(prompts['Claude']),
-            'Gemini': Gemini(prompts['Gemini']),
-            'Grok': Grok(prompts['Grok']),
-            'Llama': Llama(prompts['Llama'])
-        }
-        
-        # Store the prompts for potential updates
-        self.system_prompts = prompts
-        
+            # Ensure only known models are included
+            prompts = {name: p for name, p in prompts.items() if name in MODEL_CLASSES}
+
+        # Initialize models dynamically using the mapping
+        self.models = {}
+        for model_name, model_class in MODEL_CLASSES.items():
+            # Only instantiate if a prompt is available (even if None)
+            if model_name in prompts:
+                 try:
+                    self.models[model_name] = model_class(prompts.get(model_name))
+                 except Exception as e:
+                     print(f"Warning: Could not initialize model {model_name}: {e}")
+                     # Optionally remove from prompts if init fails?
+                     # Or keep it with a None object? For now, just skip adding to self.models
+                     pass # Skip adding this model if it fails to initialize
+
+
+        # Store the effective prompts used for initialization
+        self.system_prompts = {name: prompts.get(name) for name in self.models.keys()} # Store only prompts for successfully loaded models
+
         # Set default prompt templates if not provided
         self.initial_prompt_template = initial_prompt_template or """You are a wise member of a virtual board of directors tasked with solving complex problems. 
         Please provide your initial thoughts on this problem: 
@@ -84,27 +103,28 @@ class AICouncil:
             new_prompt (str): New system prompt for the model
             
         Returns:
-            bool: True if successful, False if model not found
+            bool: True if successful, False if model not found or init fails
         """
-        if model_name not in self.models:
+        if model_name not in MODEL_CLASSES:
+            print(f"Error: Model '{model_name}' is not a recognized model class.")
             return False
         
-        # Update the stored prompt
-        self.system_prompts[model_name] = new_prompt
+        model_class = MODEL_CLASSES[model_name]
         
-        # Reinitialize the model with the new prompt
-        if model_name == 'ChatGPT':
-            self.models[model_name] = ChatGPT(new_prompt)
-        elif model_name == 'Claude':
-            self.models[model_name] = Claude(new_prompt)
-        elif model_name == 'Gemini':
-            self.models[model_name] = Gemini(new_prompt)
-        elif model_name == 'Grok':
-            self.models[model_name] = Grok(new_prompt)
-        elif model_name == 'Llama':
-            self.models[model_name] = Llama(new_prompt)
-        
-        return True
+        try:
+            # Reinitialize the model with the new prompt
+            self.models[model_name] = model_class(new_prompt)
+            # Update the stored prompt
+            self.system_prompts[model_name] = new_prompt
+            print(f"Successfully updated and reinitialized model '{model_name}'.")
+            return True
+        except Exception as e:
+            print(f"Error: Failed to reinitialize model '{model_name}' with new prompt: {e}")
+            # Optionally remove the model if re-init fails?
+            # Or revert to the old prompt/instance?
+            # For now, just report error and return False
+            # Keep the old instance in self.models and old prompt in self.system_prompts
+            return False
     
     def update_all_system_prompts(self, new_prompts):
         """

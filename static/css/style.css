@@ -1,0 +1,165 @@
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1f2937;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #4b5563;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #6b7280;
+}
+
+/* Message animations */
+.message {
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fadeIn 0.3s ease forwards;
+}
+
+@keyframes fadeIn {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Typing indicator */
+.typing-indicator {
+    display: inline-block;
+    padding: 8px 16px;
+    background: #374151;
+    border-radius: 16px;
+    margin: 8px 0;
+}
+
+.typing-indicator span {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: #9ca3af;
+    border-radius: 50%;
+    margin: 0 2px;
+    animation: typing 1s infinite;
+}
+
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typing {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+}
+
+/* AI Character Styles */
+.ai-character {
+    transition: transform 0.2s ease-in-out;
+}
+
+.ai-character:hover {
+    transform: translateY(-2px);
+}
+
+.sprite-container {
+    image-rendering: pixelated;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    position: relative;
+}
+
+.sprite-container::after {
+    content: '';
+    position: absolute;
+    bottom: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80%;
+    height: 4px;
+    background: rgba(59, 130, 246, 0.5);
+    border-radius: 50%;
+    filter: blur(2px);
+}
+
+/* Animation States */
+.sprite-container[data-state="idle"] {
+    animation: idle 2s ease-in-out infinite;
+}
+
+.sprite-container[data-state="thinking"] {
+    animation: thinking 1s ease-in-out infinite;
+}
+
+.sprite-container[data-state="speaking"] {
+    animation: speaking 0.5s ease-in-out infinite;
+}
+
+/* Keyframe Animations */
+@keyframes idle {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px); }
+}
+
+@keyframes thinking {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+@keyframes speaking {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-1px); }
+    75% { transform: translateX(1px); }
+}
+
+/* Chat Container Styles */
+#chat-container {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+#chat-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+#chat-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#chat-container::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+}
+
+/* Message Styles */
+.message {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+}
+
+.message.user {
+    background-color: rgba(59, 130, 246, 0.1);
+    margin-left: 2rem;
+}
+
+.message.ai {
+    background-color: rgba(255, 255, 255, 0.05);
+    margin-right: 2rem;
+}
+
+.message .author {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    font-size: 0.875rem;
+}
+
+.message .content {
+    color: rgba(255, 255, 255, 0.9);
+    line-height: 1.5;
+} 

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Council</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <header class="text-center mb-12">
+            <h1 class="text-4xl font-bold mb-2">AI Council</h1>
+            <p class="text-gray-400">Discuss complex topics with a council of AI advisors</p>
+        </header>
+
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- AI Council Display -->
+            <div class="lg:col-span-1">
+                <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
+                    <h2 class="text-xl font-bold mb-4">Council Members</h2>
+                    <div id="ai-council" class="space-y-4">
+                        <!-- AI characters will be dynamically inserted here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Area -->
+            <div class="lg:col-span-2">
+                <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
+                    <div id="chat-container" class="mb-6 min-h-[400px] max-h-[600px] overflow-y-auto">
+                        <!-- Chat messages will appear here -->
+                    </div>
+
+                    <form id="chat-form" class="flex gap-4">
+                        <input 
+                            type="text" 
+                            id="user-input" 
+                            class="flex-1 bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Type your message here..."
+                            required
+                        >
+                        <button 
+                            type="submit" 
+                            class="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-lg font-medium transition-colors"
+                        >
+                            Send
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </main>
+
+        <!-- Council Members Section -->
+        <section class="mt-12">
+            <div class="bg-gray-800 rounded-lg p-8 shadow-lg">
+                <h2 class="text-2xl font-bold mb-6">Council Members</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div class="bg-gray-700 rounded-lg p-6">
+                        <div class="flex items-center space-x-4">
+                            <div class="sprite-container w-16 h-16" data-state="idle">
+                                <!-- Sprite will be inserted here -->
+                            </div>
+                            <div>
+                                <h3 class="font-medium text-lg mb-1">Claude</h3>
+                                <p class="text-sm text-gray-400">Anthropic's AI Assistant</p>
+                            </div>
+                        </div>
+                        <p class="mt-4 text-gray-300 text-sm">
+                            A thoughtful and nuanced AI focused on helpful and honest interactions.
+                        </p>
+                    </div>
+
+                    <div class="bg-gray-700 rounded-lg p-6">
+                        <div class="flex items-center space-x-4">
+                            <div class="sprite-container w-16 h-16" data-state="idle">
+                                <!-- Sprite will be inserted here -->
+                            </div>
+                            <div>
+                                <h3 class="font-medium text-lg mb-1">GPT-4</h3>
+                                <p class="text-sm text-gray-400">OpenAI's Advanced Model</p>
+                            </div>
+                        </div>
+                        <p class="mt-4 text-gray-300 text-sm">
+                            A powerful language model with broad knowledge and capabilities.
+                        </p>
+                    </div>
+
+                    <div class="bg-gray-700 rounded-lg p-6">
+                        <div class="flex items-center space-x-4">
+                            <div class="sprite-container w-16 h-16" data-state="idle">
+                                <!-- Sprite will be inserted here -->
+                            </div>
+                            <div>
+                                <h3 class="font-medium text-lg mb-1">Gemini</h3>
+                                <p class="text-sm text-gray-400">Google's AI Model</p>
+                            </div>
+                        </div>
+                        <p class="mt-4 text-gray-300 text-sm">
+                            A versatile AI model with strong analytical and reasoning capabilities.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Templates -->
+    <template id="ai-character-template">
+        <div class="ai-character bg-gray-700 rounded-lg p-4">
+            <div class="sprite-container w-24 h-24 mx-auto mb-2">
+                <!-- Sprite will be inserted here -->
+            </div>
+            <h3 class="text-center font-medium mb-1"></h3>
+            <div class="text-xs text-gray-400 text-center status"></div>
+        </div>
+    </template>
+
+    <!-- Custom JavaScript -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html> 

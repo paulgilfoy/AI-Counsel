@@ -6,6 +6,10 @@ __pycache__/
 # C extensions
 *.so
 
+# Cursor IDE files
+.cursor/
+.cursor/*
+
 # Pauls files
 firstdiscussion.txt
 startup.py

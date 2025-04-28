@@ -389,77 +389,59 @@ class CouncilMembersUI {
 // Chat Interface (modified to use CouncilMembersUI for active members)
 class ChatInterface {
     constructor(councilMembersUI) { // Changed constructor parameter
-        this.chatMessages = document.getElementById('chat-messages');
-        this.startDiscussionForm = document.getElementById('start-discussion-form');
-        this.discussionTopicInput = document.getElementById('discussion-topic-input');
+        this.chatContainer = document.getElementById('chat-container');
+        this.chatForm = document.getElementById('chat-form');
+        this.userInput = document.getElementById('user-input');
+        this.newDiscussionForm = document.getElementById('new-discussion-form');
+        this.discussionTopicInput = document.getElementById('discussion-topic');
         this.startDiscussionButton = document.getElementById('start-discussion-button');
         this.startDiscussionStatus = document.getElementById('start-discussion-status');
-        this.chatForm = document.getElementById('chat-form'); // Follow-up form
-        this.userInput = document.getElementById('user-input');
-        this.sendButton = this.chatForm.querySelector('button[type="submit"]'); // Adjust if needed
         this.councilMembersUI = councilMembersUI; // Store reference
         this.currentDiscussionId = null;
-
-        this.placeholderSprites = ["grok1.jpeg", "gemini3.jpeg", "gemini2.jpeg", "Gemini1.jpeg", "chatgpt1.webp", "grok4.jpeg"]; // Keep placeholder list
-
         this.setupEventListeners();
-        this.showInitialState(); // Show start form initially
     }
 
     setupEventListeners() {
-        // Listener for the initial discussion form
-        this.startDiscussionForm.addEventListener('submit', (e) => {
+        // Listener for starting a new discussion
+        this.newDiscussionForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const topic = this.discussionTopicInput.value.trim();
-            if (topic) {
-                this.startNewDiscussion(topic);
+            if (!topic) {
+                this.setStartDiscussionStatus('Please enter a topic.', true);
+                return;
             }
+            await this.startNewDiscussion(topic);
         });
 
-        // Listener for the follow-up message form
-        this.chatForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.handleSendMessage();
-        });
-    }
-
-    showInitialState() {
-        this.chatMessages.innerHTML = '<p class="text-center text-gray-500">Start a new discussion below.</p>'; // Placeholder message
-        this.startDiscussionForm.style.display = 'flex'; // Show start form
-        this.startDiscussionStatus.style.display = 'block'; // Show status for start form
-        this.chatForm.style.display = 'none'; // Hide follow-up form
-        this.currentDiscussionId = null;
-    }
-
-    showChattingState() {
-        this.startDiscussionForm.style.display = 'none'; // Hide start form
-        this.startDiscussionStatus.style.display = 'none'; // Hide status for start form
-        this.chatForm.style.display = 'flex'; // Show follow-up form
+        // Listener for sending messages within the current discussion
+        // TODO: Re-enable this once a discussion is active
+        // this.chatForm.addEventListener('submit', (e) => {
+        //     e.preventDefault();
+        //     this.handleSendMessage();
+        // });
     }
 
     setStartDiscussionStatus(message, isError = false) {
         this.startDiscussionStatus.textContent = message;
-        this.startDiscussionStatus.className = `mt-3 text-sm ${isError ? 'text-red-400' : 'text-gray-400'}`;
+        this.startDiscussionStatus.style.color = isError ? '#f87171' : '#9ca3af'; // Red-400 or Gray-400
     }
 
     async startNewDiscussion(topic) {
-        console.log(`Starting new discussion with topic: ${topic}`);
-        this.setStartDiscussionStatus('Starting discussion...', false);
         this.startDiscussionButton.disabled = true;
-        this.discussionTopicInput.disabled = true;
+        this.setStartDiscussionStatus('Starting discussion...');
 
-        // 1. Get active models from CouncilMembersUI
-        const activeModels = this.councilMembersUI.getActiveMemberIds();
+        // Get active model IDs from the CouncilMembersUI
+        const activeModels = this.councilMembersUI.members
+            .filter(m => m.isActive)
+            .map(m => m.id);
+
         if (activeModels.length === 0) {
-            this.setStartDiscussionStatus('Error: Please activate at least one council member.', true);
+            this.setStartDiscussionStatus('Please activate at least one council member.', true);
             this.startDiscussionButton.disabled = false;
-            this.discussionTopicInput.disabled = false;
             return;
         }
-        console.log('Active models:', activeModels);
 
         try {
-            // 2. Call API to start discussion
             const response = await fetch('/api/discussions', {
                 method: 'POST',
                 headers: {
@@ -468,161 +450,156 @@ class ChatInterface {
                 body: JSON.stringify({ 
                     topic: topic,
                     active_models: activeModels
+                    // rounds: 3 // Optionally specify rounds, defaults on backend
                 }),
             });
 
             const data = await response.json();
-            console.log('API Response:', data);
 
             if (!response.ok) {
-                throw new Error(data.error || 'Failed to start discussion');
+                throw new Error(data.message || `HTTP error! status: ${response.status}`);
             }
 
-            // 3. Clear initial message and add user's topic
-            this.chatMessages.innerHTML = ''; // Clear the 'Start a new discussion' placeholder
-            this.addMessage('user', 'You', topic); 
-
-            // 4. Display results
             this.currentDiscussionId = data.discussion_id;
-            this.displayDiscussionResults(data.results);
-
-            // 5. Update UI state
-            this.setStartDiscussionStatus('Discussion started successfully.', false);
-            this.discussionTopicInput.value = ''; // Clear the input
-            this.showChattingState(); // Switch to follow-up input
+            console.log("New discussion started:", this.currentDiscussionId);
+            this.setStartDiscussionStatus(`Discussion started (ID: ${this.currentDiscussionId}). Displaying initial responses...`);
+            
+            // Clear the chat area and display initial results (Task 5e part)
+            this.chatContainer.innerHTML = ''; // Clear previous messages
+            this.addMessage('system', 'Topic', topic); // Show the topic
+            this.displayDiscussionResults(data.results); // Display the first round
+            
+            // Optionally clear the topic input
+            this.discussionTopicInput.value = '';
+            // TODO: Enable the regular chat input form now
 
         } catch (error) {
-            console.error('Error starting discussion:', error);
-            this.setStartDiscussionStatus(`Error: ${error.message}`, true);
+            console.error('Failed to start discussion:', error);
+            this.setStartDiscussionStatus(`Error starting discussion: ${error.message}`, true);
         } finally {
-            // Re-enable the form elements in case of error, but keep disabled if successful
-            if (this.startDiscussionForm.style.display !== 'none') {
-                 this.startDiscussionButton.disabled = false;
-                 this.discussionTopicInput.disabled = false;
-            }
+            this.startDiscussionButton.disabled = false;
         }
     }
 
+    // New function to display results from API
     displayDiscussionResults(results) {
-        console.log('Displaying discussion results:', results);
-        if (!results || results.length === 0) {
-            // Handle cases where the API might return empty results initially
-            // Maybe add a system message? 
-            this.addMessage('system', 'System', 'Waiting for responses...');
-            return;
-        }
-        // Assuming results is an array of message objects like: 
-        // [{ role: 'assistant', name: 'ModelName', content: '...' }, ...]
-        // Or potentially nested rounds
-        results.forEach(message => {
-            if (message.role === 'assistant' && message.name && message.content) {
-                 this.addMessage('ai', message.name, message.content);
-            } else if (message.role === 'user' && message.content) {
-                // Might not receive user messages back in initial results, but handle if we do
-                this.addMessage('user', 'You', message.content);
-            } else {
-                 console.warn("Received unknown message format: ", message);
-                 this.addMessage('system', 'System', `Received message from ${message.name || 'Unknown'}`);
+        // Results format: { "model_id": "response text", ... }
+        for (const modelId in results) {
+            if (results.hasOwnProperty(modelId)) {
+                const messageText = results[modelId];
+                // Use modelId as author for now, maybe fetch more details later
+                this.addMessage('ai', modelId, messageText);
             }
-        });
+        }
+        // Ensure the chat scrolls to the bottom
+        this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
     }
 
-    async handleSendMessage() {
-        const messageContent = this.userInput.value.trim();
-        if (!messageContent || !this.currentDiscussionId) {
-            console.log("Cannot send message: Empty content or no active discussion.");
-            return; // Don't send empty messages or if no discussion is active
+    handleSendMessage() {
+        // TODO: Implement sending follow-up messages using /api/discussions/<id>/contribute
+        // This function would be triggered by the #chat-form
+        // Need to re-enable the event listener for #chat-form as well
+        const message = this.userInput.value.trim();
+        if (!message || !this.currentDiscussionId) {
+            console.log("Cannot send message - no active discussion or message empty.");
+            return; 
         }
-
-        console.log(`Sending message: ${messageContent} to discussion ${this.currentDiscussionId}`);
-
-        // 1. Add user message immediately to UI
-        this.addMessage('user', 'You', messageContent);
-        this.userInput.value = ''; // Clear input field
-        this.sendButton.disabled = true;
-        this.userInput.disabled = true;
-
-        try {
-            // 2. Call API to contribute to the discussion
-             const response = await fetch(`/api/discussions/${this.currentDiscussionId}/contribute`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ contribution: messageContent }),
-            });
-
-            const data = await response.json();
-            console.log('API Response for contribution:', data);
-
-            if (!response.ok) {
-                throw new Error(data.error || 'Failed to send message');
-            }
-
-            // 3. Display new AI responses
-            if (data.results) {
-                 this.displayDiscussionResults(data.results); // Display the new round of AI responses
-            } else {
-                 this.addMessage('system', 'System', 'Received confirmation, waiting for next round...');
-            }
-
-        } catch (error) {
-            console.error('Error sending message:', error);
-            this.addMessage('system', 'System', `Error sending message: ${error.message}`);
-            // Optional: Re-enable input on error or add the failed message back?
-        } finally {
-            this.sendButton.disabled = false;
-            this.userInput.disabled = false;
-             this.userInput.focus(); // Set focus back to input
-        }
+        console.log("Sending message:", message, "to discussion:", this.currentDiscussionId);
+        // Placeholder: add user message visually
+        this.addMessage('user', 'You', message);
+        this.userInput.value = '';
+        // API call to POST /api/discussions/<id>/contribute would go here
+        // Then potentially call displayDiscussionResults with the AI responses
     }
 
     addMessage(type, author, content) {
-        console.log(`Adding message - Type: ${type}, Author: ${author}, Content: ${content.substring(0, 50)}...`);
         const messageElement = document.createElement('div');
-        messageElement.classList.add('chat-message', `message-${type}`); // type: 'user', 'ai', 'system'
-
-        let authorHtml = '';
-        let contentHtml = `<div class="message-content">${content.replace(/\n/g, '<br>')}</div>`; // Basic formatting
-
-        if (type === 'ai') {
-            const spriteFilename = this._getMemberSprite(author);
-            const spriteUrl = spriteFilename ? `/static/images/${spriteFilename}` : '/static/images/ai_placeholder.png'; // Fallback placeholder
-            authorHtml = `
-                <div class="message-author flex items-center mb-1">
-                    <img src="${spriteUrl}" alt="${author} avatar" class="w-6 h-6 rounded-full mr-2">
-                    <span class="font-medium">${author}</span>
-                </div>`;
-        } else if (type === 'user') {
-            authorHtml = `
-                <div class="message-author flex items-center justify-end mb-1">
-                    <span class="font-medium mr-2">${author}</span>
-                    <img src="/static/images/user_placeholder.png" alt="User avatar" class="w-6 h-6 rounded-full">
-                </div>`;
-        } else { // system
-             authorHtml = `
-                <div class="message-author flex items-center mb-1">
-                     <span class="font-medium text-gray-500 italic">${author}</span>
-                 </div>`;
-        }
+        messageElement.classList.add('chat-message', `message-${type}`); // e.g., message-user, message-ai, message-system
         
-        messageElement.innerHTML = authorHtml + contentHtml;
+        const authorElement = document.createElement('span');
+        authorElement.classList.add('font-semibold');
+        authorElement.textContent = `${author}: `;
 
-        this.chatMessages.appendChild(messageElement);
-        this.chatMessages.scrollTop = this.chatMessages.scrollHeight; // Scroll to bottom
+        const contentElement = document.createElement('span');
+        contentElement.textContent = content;
+
+        if (type === 'user') {
+            messageElement.classList.add('text-right', 'mb-2');
+            authorElement.classList.add('text-blue-400'); 
+            messageElement.appendChild(contentElement); // Content first for user
+            messageElement.appendChild(authorElement); // Author second
+        } else if (type === 'ai') {
+            messageElement.classList.add('text-left', 'mb-4'); // More margin below AI messages
+            // Find member details to get sprite placeholder
+            const member = this.councilMembersUI.members.find(m => m.id === author);
+            const spriteIndex = this.councilMembersUI.members.findIndex(m => m.id === author);
+            const spriteFilename = member ? placeholderSprites[spriteIndex % placeholderSprites.length] : 'grok1.jpeg'; // Default sprite
+            
+            const avatarElement = document.createElement('div');
+            avatarElement.classList.add('w-8', 'h-8', 'rounded-full', 'bg-gray-600', 'mr-2', 'inline-block', 'align-top');
+            avatarElement.style.backgroundImage = `url(/static/images/${spriteFilename})`;
+            avatarElement.style.backgroundSize = 'cover';
+            avatarElement.style.backgroundPosition = 'center';
+            avatarElement.title = author; // Show name on hover
+            
+            const messageContentWrapper = document.createElement('div');
+            messageContentWrapper.classList.add('inline-block', 'bg-gray-700', 'rounded-lg', 'px-3', 'py-2', 'max-w-[80%]');
+            
+            authorElement.classList.add('text-green-400', 'block', 'text-sm'); // Author name on top
+            authorElement.textContent = author;
+            contentElement.classList.add('text-gray-200');
+            
+            messageContentWrapper.appendChild(authorElement);
+            messageContentWrapper.appendChild(contentElement);
+            
+            messageElement.appendChild(avatarElement);
+            messageElement.appendChild(messageContentWrapper);
+
+        } else { // System messages
+            messageElement.classList.add('text-center', 'text-gray-500', 'text-sm', 'my-2');
+            authorElement.textContent = `[${author}]`;
+            messageElement.appendChild(authorElement);
+            messageElement.appendChild(document.createTextNode(' ')); // Add space
+            messageElement.appendChild(contentElement);
+        }
+
+        this.chatContainer.appendChild(messageElement);
+        this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
     }
 
-    // Helper to get sprite (assuming councilMembersUI has the mapping)
+    // Helper to get member sprite (Placeholder implementation)
+    // TODO: Enhance this later if needed
     _getMemberSprite(memberId) {
-        const member = this.councilMembersUI.getMemberById(memberId);
-        // Use placeholder sprite based on index, cycling through available images
-        const index = this.councilMembersUI.members.findIndex(m => m.id === memberId);
-        return this.placeholderSprites[index % this.placeholderSprites.length] || null;
-        // return member ? member.sprite : null; // Replace with actual sprite logic when available
+        const memberIndex = this.councilMembersUI.members.findIndex(m => m.id === memberId);
+         if (memberIndex !== -1) {
+             return placeholderSprites[memberIndex % placeholderSprites.length];
+         }
+         return placeholderSprites[0]; // Default
     }
 
-    // TODO: Implement /api/discussions/<id>/continue endpoint handling if needed
-    // async continueDiscussion() { ... }
+    async sendMessage(message, activeModels) {
+        // This function seems deprecated by startNewDiscussion and handleSendMessage logic
+        // Keeping it here commented out for reference, might remove later.
+        /*
+// ... existing code ...
+
+        const response = await fetch('/api/discussions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            // Send message and active_models list
+            body: JSON.stringify({ message, active_models: activeModels }), 
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+            throw new Error(`Failed to send message: ${errorData.detail || response.statusText}`);
+        }
+
+        return response.json();
+        */
+    }
 }
 
 // Initialize the application

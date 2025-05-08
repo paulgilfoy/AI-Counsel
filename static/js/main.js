@@ -389,57 +389,52 @@ class CouncilMembersUI {
 // Chat Interface (modified to use CouncilMembersUI for active members)
 class ChatInterface {
     constructor(councilMembersUI) { // Changed constructor parameter
-        this.chatContainer = document.getElementById('chat-container');
         this.chatForm = document.getElementById('chat-form');
         this.userInput = document.getElementById('user-input');
-        this.newDiscussionForm = document.getElementById('new-discussion-form');
-        this.discussionTopicInput = document.getElementById('discussion-topic');
-        this.startDiscussionButton = document.getElementById('start-discussion-button');
-        this.startDiscussionStatus = document.getElementById('start-discussion-status');
+        this.chatContainer = document.getElementById('chat-container');
         this.councilMembersUI = councilMembersUI; // Store reference
-        this.currentDiscussionId = null;
+        this.placeholderSprites = placeholderSprites; // Store placeholder sprites
+        this.currentDiscussionId = null; // Track the current discussion ID
+
+        if (!this.chatForm || !this.userInput || !this.chatContainer) {
+            console.error('Chat interface elements not found!');
+            return;
+        }
         this.setupEventListeners();
+        this.updateInputPlaceholder(); // Initial placeholder setting
     }
 
     setupEventListeners() {
-        // Listener for starting a new discussion
-        this.newDiscussionForm.addEventListener('submit', async (e) => {
+        this.chatForm.addEventListener('submit', (e) => {
             e.preventDefault();
-            const topic = this.discussionTopicInput.value.trim();
-            if (!topic) {
-                this.setStartDiscussionStatus('Please enter a topic.', true);
-                return;
-            }
-            await this.startNewDiscussion(topic);
+            this.handleSendMessage();
         });
-
-        // Listener for sending messages within the current discussion
-        // TODO: Re-enable this once a discussion is active
-        // this.chatForm.addEventListener('submit', (e) => {
-        //     e.preventDefault();
-        //     this.handleSendMessage();
-        // });
     }
 
     setStartDiscussionStatus(message, isError = false) {
-        this.startDiscussionStatus.textContent = message;
-        this.startDiscussionStatus.style.color = isError ? '#f87171' : '#9ca3af'; // Red-400 or Gray-400
+        console.log(`Discussion Status: ${message}`);
+         if (isError) {
+             this.addMessage('system', 'Error', message);
+         } else {
+             this.addMessage('system', 'System', message);
+         }
     }
 
     async startNewDiscussion(topic) {
-        this.startDiscussionButton.disabled = true;
-        this.setStartDiscussionStatus('Starting discussion...');
+        console.log(`Starting new discussion with topic: "${topic}"`);
+        this.addMessage('user', 'You', topic); // Display user's initial message
 
-        // Get active model IDs from the CouncilMembersUI
-        const activeModels = this.councilMembersUI.members
+        const activeMembers = this.councilMembersUI.members
             .filter(m => m.isActive)
             .map(m => m.id);
 
-        if (activeModels.length === 0) {
-            this.setStartDiscussionStatus('Please activate at least one council member.', true);
-            this.startDiscussionButton.disabled = false;
+        if (activeMembers.length === 0) {
+            this.setStartDiscussionStatus("Please activate at least one council member.", true);
             return;
         }
+
+        console.log("Active members for new discussion:", activeMembers);
+        this.setStartDiscussionStatus("Starting discussion with council...");
 
         try {
             const response = await fetch('/api/discussions', {
@@ -447,69 +442,116 @@ class ChatInterface {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     topic: topic,
-                    active_models: activeModels
-                    // rounds: 3 // Optionally specify rounds, defaults on backend
+                    active_models: activeMembers
                 }),
             });
 
-            const data = await response.json();
-
             if (!response.ok) {
-                throw new Error(data.message || `HTTP error! status: ${response.status}`);
+                const errorData = await response.json().catch(() => ({ error: 'Unknown error starting discussion.' }));
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
             }
 
-            this.currentDiscussionId = data.discussion_id;
-            console.log("New discussion started:", this.currentDiscussionId);
-            this.setStartDiscussionStatus(`Discussion started (ID: ${this.currentDiscussionId}). Displaying initial responses...`);
-            
-            // Clear the chat area and display initial results (Task 5e part)
-            this.chatContainer.innerHTML = ''; // Clear previous messages
-            this.addMessage('system', 'Topic', topic); // Show the topic
-            this.displayDiscussionResults(data.results); // Display the first round
-            
-            // Optionally clear the topic input
-            this.discussionTopicInput.value = '';
-            // TODO: Enable the regular chat input form now
+            const result = await response.json();
+            console.log("New discussion started:", result);
+            this.currentDiscussionId = result.discussion_id; // Store the ID
+            this.setStartDiscussionStatus(`Discussion ${this.currentDiscussionId} started.`);
+            this.displayDiscussionResults(result.results || {}); // Display initial AI responses
+            this.updateInputPlaceholder(); // Update placeholder after discussion starts
 
         } catch (error) {
-            console.error('Failed to start discussion:', error);
-            this.setStartDiscussionStatus(`Error starting discussion: ${error.message}`, true);
-        } finally {
-            this.startDiscussionButton.disabled = false;
+            console.error('Error starting discussion:', error);
+            this.setStartDiscussionStatus(`Error: ${error.message}`, true);
+            this.currentDiscussionId = null; // Ensure ID is null on error
         }
     }
 
-    // New function to display results from API
     displayDiscussionResults(results) {
-        // Results format: { "model_id": "response text", ... }
-        for (const modelId in results) {
-            if (results.hasOwnProperty(modelId)) {
-                const messageText = results[modelId];
-                // Use modelId as author for now, maybe fetch more details later
-                this.addMessage('ai', modelId, messageText);
+         const discussionResults = results || {};
+        console.log("--- Displaying Discussion Results ---"); // Log start
+        console.log("Raw results object received:", JSON.stringify(discussionResults, null, 2)); // Log the whole object structure
+
+         if (Object.keys(discussionResults).length === 0) {
+             this.addMessage('system', 'System', 'No initial responses received.');
+             return;
+         }
+
+        Object.keys(discussionResults).sort().forEach(round => {
+            console.log(`Processing round: ${round}`); // Log current round key
+            const roundMessages = discussionResults[round];
+            console.log(`Value for round ${round} (type: ${typeof roundMessages}):`, JSON.stringify(roundMessages, null, 2)); // Log the value and its type
+
+            // Add a check before calling forEach
+            if (Array.isArray(roundMessages)) {
+                roundMessages.forEach(msg => {
+                     if (msg && msg.sender && msg.message) {
+                         this.addMessage('ai', msg.sender, msg.message);
+                     } else {
+                         console.warn("Skipping invalid message format in round " + round + ":", msg);
+                     }
+                });
+            } else {
+                // Log an error if it's not an array
+                console.error(`Expected an array for round ${round}, but got type ${typeof roundMessages}. Value:`, roundMessages);
+                this.addMessage('system', 'Error', `Failed to process responses for round ${round} due to unexpected data format.`);
             }
-        }
-        // Ensure the chat scrolls to the bottom
-        this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
+        });
+        console.log("--- Finished Displaying Discussion Results ---"); // Log end
     }
 
-    handleSendMessage() {
-        // TODO: Implement sending follow-up messages using /api/discussions/<id>/contribute
-        // This function would be triggered by the #chat-form
-        // Need to re-enable the event listener for #chat-form as well
-        const message = this.userInput.value.trim();
-        if (!message || !this.currentDiscussionId) {
-            console.log("Cannot send message - no active discussion or message empty.");
-            return; 
+    async handleSendMessage() {
+        const messageText = this.userInput.value.trim();
+        if (!messageText) return;
+
+        if (this.currentDiscussionId === null) {
+            await this.startNewDiscussion(messageText);
+        } else {
+            await this.contributeToDiscussion(messageText);
         }
-        console.log("Sending message:", message, "to discussion:", this.currentDiscussionId);
-        // Placeholder: add user message visually
-        this.addMessage('user', 'You', message);
-        this.userInput.value = '';
-        // API call to POST /api/discussions/<id>/contribute would go here
-        // Then potentially call displayDiscussionResults with the AI responses
+
+        this.userInput.value = ''; // Clear input after processing
+    }
+
+    async contributeToDiscussion(message) {
+        if (!this.currentDiscussionId) {
+            console.error("Cannot contribute without a currentDiscussionId.");
+            this.addMessage('system', 'Error', 'Cannot send message, no active discussion found.');
+            return;
+        }
+        console.log(`Contributing to discussion ${this.currentDiscussionId}: "${message}"`);
+        this.addMessage('user', 'You', message); // Display user's message
+
+        this.setStartDiscussionStatus("Sending your message..."); // Use status for feedback
+
+        try {
+            const response = await fetch(`/api/discussions/${this.currentDiscussionId}/contribute`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ contribution: message }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Unknown error contributing to discussion.' }));
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log("Contribution response:", result);
+            this.setStartDiscussionStatus("Message sent."); // Update status
+
+            // The current backend /contribute endpoint doesn't return new AI messages.
+            // If it did, we would call displayDiscussionResults or a similar function here.
+            // We don't need to change the placeholder here as the discussion is still ongoing.
+
+            // Future work (streaming/Task 7) will handle receiving subsequent AI responses.
+
+        } catch (error) {
+            console.error('Error contributing to discussion:', error);
+            this.setStartDiscussionStatus(`Error sending message: ${error.message}`, true);
+        }
     }
 
     addMessage(type, author, content) {
@@ -599,6 +641,16 @@ class ChatInterface {
 
         return response.json();
         */
+    }
+
+    updateInputPlaceholder() {
+        if (this.currentDiscussionId === null) {
+            this.userInput.placeholder = "Start a new discussion by typing your topic here...";
+        } else {
+            this.userInput.placeholder = "Type your message to continue the discussion...";
+            // Future Enhancement (Task 8c): Modify this when the 'Continue' button is added
+            // e.g., "Type your message... or click 'Continue Discussion'"
+        }
     }
 }
 

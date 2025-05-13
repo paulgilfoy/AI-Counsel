@@ -18,28 +18,43 @@
 
         <main class="flex justify-center">
             <!-- Chat Area -->
-            <div class="w-full max-w-4xl px-4">
-                <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
-                    <div id="chat-container" class="mb-6 min-h-[400px] max-h-[600px] overflow-y-auto">
-                        <!-- Chat messages will appear here -->
-                    </div>
-
-                    <form id="chat-form" class="flex flex-col sm:flex-row gap-4">
-                        <input 
-                            type="text" 
-                            id="user-input" 
-                            class="flex-1 bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="Type your message here..."
-                            required
-                        >
-                        <button 
-                            type="submit" 
-                            class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-lg font-medium transition-colors"
-                        >
-                            Send
-                        </button>
-                    </form>
+            <div class="w-full md:w-7/12 p-4">
+                <div id="chat-container" class="bg-gray-800 rounded-lg p-4 mb-4 overflow-y-auto shadow-inner">
+                    <!-- Chat messages will be added here by JavaScript -->
                 </div>
+                
+                <!-- Rounds Selector -->
+                <div class="rounds-control flex justify-end px-4 mt-2 mb-2">
+                    <label for="rounds-selector" class="text-gray-300 flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                        </svg>
+                        Discussion rounds:
+                    </label>
+                    <select id="rounds-selector" class="ml-2">
+                        <option value="1">1 (Default)</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="5">5</option>
+                    </select>
+                </div>
+                
+                <form id="chat-form" class="mt-2 flex">
+                    <input 
+                        id="user-input" 
+                        class="flex-grow bg-gray-700 text-white border border-gray-600 rounded-l-lg px-4 py-2 focus:outline-none focus:border-blue-500" 
+                        type="text" 
+                        placeholder="Start a new discussion by typing your topic here..." 
+                        autocomplete="off"
+                    >
+                    <button 
+                        type="submit" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-r-lg transition-colors focus:outline-none"
+                    >
+                        Send
+                    </button>
+                </form>
+                <!-- Future: Could add a "Continue Discussion" button here -->
             </div>
         </main>
 

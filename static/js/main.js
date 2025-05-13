@@ -32,6 +32,21 @@ const placeholderSprites = [
     "grok4.jpeg"
 ];
 
+// Available AI images
+const aiImages = {
+    'Claude': 'claude1.jpeg',
+    'ChatGPT': 'chatgpt1.webp',
+    'Gemini': 'gemini1.jpeg',
+    'Llama': 'llma1.jpeg',
+    'Grok': 'grok1.jpeg',
+    // Add more specific mappings to match exact model IDs
+    'claude-3-5-sonnet-20241022': 'claude1.jpeg',
+    'gpt-4o-mini-2024-07-18': 'chatgpt1.webp',
+    'gemini-2.0-flash': 'gemini1.jpeg',
+    'meta/meta-llama-3-70b-instruct': 'llma1.jpeg',
+    'grok-2-latest': 'grok1.jpeg'
+};
+
 // AI Council Management
 class AICouncilUI {
     constructor() {
@@ -65,10 +80,11 @@ class AICouncilUI {
         const name = element.querySelector('h3');
         const status = element.querySelector('.status');
 
-        sprite.style.backgroundImage = `url(/static/images/${model.sprite})`;
-        sprite.dataset.state = 'idle';
+        // Use the static image for this model
+        const imageFile = aiImages[model.id] || 'grok1.jpeg'; // Default to grok if not found
+        sprite.style.backgroundImage = `url(/static/images/${imageFile})`;
         name.textContent = model.name;
-        status.textContent = 'Idle';
+        status.textContent = 'Ready';
 
         return element;
     }
@@ -77,10 +93,7 @@ class AICouncilUI {
         const character = this.characters.get(modelId);
         if (!character) return;
 
-        const sprite = character.querySelector('.sprite-container');
         const status = character.querySelector('.status');
-        
-        sprite.dataset.state = state;
         status.textContent = state.charAt(0).toUpperCase() + state.slice(1);
     }
 }
@@ -202,7 +215,7 @@ class CouncilMembersUI {
         });
     }
 
-    createCard(member, index) { // Added index parameter
+    createCard(member, index) {
         const card = this.cardTemplate.content.cloneNode(true).children[0];
         card.dataset.memberId = member.id;
         card.querySelector('.member-name').textContent = member.name;
@@ -211,14 +224,9 @@ class CouncilMembersUI {
         
         const spriteContainer = card.querySelector('.sprite-container');
         
-        // Use placeholder sprite based on index, cycling through available images
-        const spriteFilename = placeholderSprites[index % placeholderSprites.length];
-        spriteContainer.style.backgroundImage = `url(/static/images/${spriteFilename})`;
-        spriteContainer.style.backgroundSize = 'cover'; // Adjust as needed
-        spriteContainer.style.backgroundPosition = 'center';
-
-        // Apply animation state based on isActive (placeholder)
-        spriteContainer.dataset.state = member.isActive ? 'idle' : 'idle'; // Could add 'inactive' state later
+        // Use the static image for this model
+        const imageFile = aiImages[member.id] || 'grok1.jpeg'; // Default to grok if not found
+        spriteContainer.style.backgroundImage = `url(/static/images/${imageFile})`;
 
         const statusIndicator = card.querySelector('.member-status-indicator');
         
@@ -384,28 +392,38 @@ class CouncilMembersUI {
         this.render();
         this.closePromptModal();
     }
+
+    getActiveMembers() {
+        // Return an array of active member objects
+        return this.members.filter(member => member.isActive);
+    }
 }
 
 // Chat Interface (modified to use CouncilMembersUI for active members)
 class ChatInterface {
     constructor(councilMembersUI) { // Changed constructor parameter
-        this.chatForm = document.getElementById('chat-form');
-        this.userInput = document.getElementById('user-input');
+        this.form = document.getElementById('chat-form');
+        this.inputField = document.getElementById('user-input');
         this.chatContainer = document.getElementById('chat-container');
-        this.councilMembersUI = councilMembersUI; // Store reference
-        this.placeholderSprites = placeholderSprites; // Store placeholder sprites
-        this.currentDiscussionId = null; // Track the current discussion ID
-
-        if (!this.chatForm || !this.userInput || !this.chatContainer) {
-            console.error('Chat interface elements not found!');
-            return;
+        this.councilMembersUI = councilMembersUI;
+        this.currentDiscussionId = null;
+        this.isContinuingDiscussion = false;
+        this.eventSource = null;
+        this.modelMessages = {};
+        this.roundsSelector = document.getElementById('rounds-selector'); // Add round selector reference
+        
+        // Check if browser supports EventSource (Server-Sent Events)
+        this.supportsEventSource = typeof EventSource !== 'undefined';
+        if (!this.supportsEventSource) {
+            console.warn('This browser does not support Server-Sent Events. Falling back to traditional requests.');
         }
+        
         this.setupEventListeners();
-        this.updateInputPlaceholder(); // Initial placeholder setting
+        this.updateInputPlaceholder();
     }
 
     setupEventListeners() {
-        this.chatForm.addEventListener('submit', (e) => {
+        this.form.addEventListener('submit', (e) => {
             e.preventDefault();
             this.handleSendMessage();
         });
@@ -421,96 +439,474 @@ class ChatInterface {
     }
 
     async startNewDiscussion(topic) {
-        console.log(`Starting new discussion with topic: "${topic}"`);
-        this.addMessage('user', 'You', topic); // Display user's initial message
-
-        const activeMembers = this.councilMembersUI.members
-            .filter(m => m.isActive)
-            .map(m => m.id);
-
-        if (activeMembers.length === 0) {
-            this.setStartDiscussionStatus("Please activate at least one council member.", true);
-            return;
-        }
-
-        console.log("Active members for new discussion:", activeMembers);
-        this.setStartDiscussionStatus("Starting discussion with council...");
-
+        this.setStartDiscussionStatus('Starting discussion...', false);
+        
         try {
-            const response = await fetch('/api/discussions', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    topic: topic,
-                    active_models: activeMembers
-                }),
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ error: 'Unknown error starting discussion.' }));
-                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            // Get active council members
+            const activeMembers = this.councilMembersUI.getActiveMembers();
+            
+            if (activeMembers.length === 0) {
+                this.addMessage('system', 'System', 'Please activate at least one council member to start a discussion.');
+                return;
             }
 
-            const result = await response.json();
-            console.log("New discussion started:", result);
-            this.currentDiscussionId = result.discussion_id; // Store the ID
-            this.setStartDiscussionStatus(`Discussion ${this.currentDiscussionId} started.`);
-            this.displayDiscussionResults(result.results || {}); // Display initial AI responses
-            this.updateInputPlaceholder(); // Update placeholder after discussion starts
-
+            // Get selected number of rounds
+            const rounds = parseInt(this.roundsSelector.value, 10) || 1;
+            
+            // Show a typing indicator for each active member
+            activeMembers.forEach(member => {
+                this.addTypingIndicator(member.id);
+            });
+            
+            // Start the discussion with streaming responses
+            if (this.supportsEventSource) {
+                // Use streaming API if EventSource is available
+                this.streamDiscussionStart(topic, activeMembers.map(m => m.id), rounds);
+            } else {
+                // Fallback to non-streaming API
+                const response = await fetch('/api/discussions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        topic: topic,
+                        active_models: activeMembers.map(m => m.id),
+                        rounds: rounds
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to start discussion: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    this.currentDiscussionId = data.discussion_id;
+                    this.updateInputPlaceholder();
+                    
+                    // Remove typing indicators
+                    this.removeAllTypingIndicators();
+                    
+                    // Display initial AI responses
+                    this.displayDiscussionResults(data.results);
+                } else {
+                    throw new Error(data.message || 'Failed to start discussion');
+                }
+            }
         } catch (error) {
             console.error('Error starting discussion:', error);
-            this.setStartDiscussionStatus(`Error: ${error.message}`, true);
-            this.currentDiscussionId = null; // Ensure ID is null on error
+            this.setStartDiscussionStatus('Error: ' + error.message, true);
+            this.removeAllTypingIndicators();
         }
     }
 
-    displayDiscussionResults(results) {
-         const discussionResults = results || {};
-        console.log("--- Displaying Discussion Results ---"); // Log start
-        console.log("Raw results object received:", JSON.stringify(discussionResults, null, 2)); // Log the whole object structure
-
-         if (Object.keys(discussionResults).length === 0) {
-             this.addMessage('system', 'System', 'No initial responses received.');
-             return;
-         }
-
-        Object.keys(discussionResults).sort().forEach(round => {
-            console.log(`Processing round: ${round}`); // Log current round key
-            const roundMessages = discussionResults[round];
-            console.log(`Value for round ${round} (type: ${typeof roundMessages}):`, JSON.stringify(roundMessages, null, 2)); // Log the value and its type
-
-            // Add a check before calling forEach
-            if (Array.isArray(roundMessages)) {
-                roundMessages.forEach(msg => {
-                     if (msg && msg.sender && msg.message) {
-                         this.addMessage('ai', msg.sender, msg.message);
-                     } else {
-                         console.warn("Skipping invalid message format in round " + round + ":", msg);
-                     }
-                });
+    streamDiscussionStart(topic, activeModels, rounds = 1) {
+        // Create a new POST request to start a discussion
+        fetch('/api/discussions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                topic: topic,
+                active_models: activeModels,
+                rounds: rounds
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Failed to start discussion: ${response.statusText}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.status === 'success') {
+                this.currentDiscussionId = data.discussion_id;
+                this.updateInputPlaceholder();
+                
+                // Now that we have a discussion ID, connect to the streaming endpoint
+                this.connectToStream(this.currentDiscussionId);
             } else {
-                // Log an error if it's not an array
-                console.error(`Expected an array for round ${round}, but got type ${typeof roundMessages}. Value:`, roundMessages);
-                this.addMessage('system', 'Error', `Failed to process responses for round ${round} due to unexpected data format.`);
+                throw new Error(data.message || 'Failed to start discussion');
+            }
+        })
+        .catch(error => {
+            console.error('Error starting discussion:', error);
+            this.setStartDiscussionStatus('Error: ' + error.message, true);
+            this.removeAllTypingIndicators();
+        });
+    }
+
+    connectToStream(discussionId) {
+        // Close any existing event source
+        if (this.eventSource) {
+            this.eventSource.close();
+        }
+        
+        // For continue discussion, first make a POST request
+        if (this.isContinuingDiscussion) {
+            // Get selected number of rounds
+            const rounds = parseInt(this.roundsSelector.value, 10) || 1;
+            
+            fetch(`/api/discussions/${discussionId}/stream`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    rounds: rounds
+                })
+            }).then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to initiate streaming');
+                }
+                // Now create the EventSource after successful POST
+                this.createEventSource(discussionId);
+            }).catch(error => {
+                console.error('Error initiating streaming:', error);
+                this.addMessage('system', 'System', `Error: ${error.message}`);
+                this.removeAllTypingIndicators();
+            });
+        } else {
+            // For initial discussion, just create the EventSource
+            this.createEventSource(discussionId);
+        }
+    }
+
+    createEventSource(discussionId) {
+        // Create a new event source for the streaming endpoint
+        this.eventSource = new EventSource(`/api/discussions/${discussionId}/stream`);
+        
+        // Initialize message containers for each model
+        this.modelMessages = {};
+        
+        // Setup event handlers
+        this.eventSource.addEventListener('stream_start', (event) => {
+            const data = JSON.parse(event.data);
+            console.log('Stream started:', data);
+            
+            // Show round progress info if available
+            if (data.rounds_requested) {
+                this.addMessage('system', 'System', `Discussion started with ${data.rounds_requested} round(s) requested.`);
             }
         });
-        console.log("--- Finished Displaying Discussion Results ---"); // Log end
+        
+        this.eventSource.addEventListener('model_start', (event) => {
+            const data = JSON.parse(event.data);
+            console.log('Model starting:', data.model);
+            
+            // Remove typing indicator for this model
+            this.removeTypingIndicator(data.model);
+            
+            // Create a message element for this model
+            this.modelMessages[data.model] = this.createStreamingMessage(data.model);
+        });
+        
+        this.eventSource.addEventListener('model_update', (event) => {
+            const data = JSON.parse(event.data);
+            console.log('Model update:', data.model, data.chunk);
+            
+            // Append the chunk to the model's message
+            this.appendToStreamingMessage(data.model, data.chunk);
+        });
+        
+        this.eventSource.addEventListener('model_complete', (event) => {
+            const data = JSON.parse(event.data);
+            console.log('Model complete:', data.model);
+            
+            // Mark the model's message as complete
+            this.completeStreamingMessage(data.model, data.response);
+        });
+        
+        this.eventSource.addEventListener('stream_complete', (event) => {
+            console.log('Stream complete');
+            
+            // Show round progress if available
+            try {
+                const data = JSON.parse(event.data);
+                if (data.rounds && data.rounds_requested) {
+                    const isComplete = data.rounds >= data.rounds_requested;
+                    if (isComplete) {
+                        this.addMessage('system', 'System', `Discussion complete. All ${data.rounds} round(s) finished.`);
+                    } else {
+                        this.addMessage('system', 'System', `Round ${data.rounds} of ${data.rounds_requested} complete.`);
+                    }
+                }
+            } catch (error) {
+                console.error('Error parsing stream_complete data:', error);
+            }
+            
+            // Close the event source
+            if (this.eventSource) {
+                this.eventSource.close();
+                this.eventSource = null;
+            }
+            
+            // Add a continue button now that the streaming is complete
+            this.addContinueButton();
+        });
+        
+        this.eventSource.addEventListener('stream_error', (event) => {
+            const data = JSON.parse(event.data);
+            console.error('Stream error:', data.error);
+            
+            // Display error message
+            this.addMessage('system', 'Error', data.error);
+            
+            // Close the event source
+            if (this.eventSource) {
+                this.eventSource.close();
+                this.eventSource = null;
+            }
+        });
+        
+        this.eventSource.onerror = (error) => {
+            console.error('EventSource error:', error);
+            this.addMessage('system', 'System', 'Connection error. Please try again.');
+            
+            // Close the event source
+            if (this.eventSource) {
+                this.eventSource.close();
+                this.eventSource = null;
+            }
+        };
+    }
+
+    createStreamingMessage(modelName) {
+        // Create a message element for this model
+        const messageContainer = document.createElement('div');
+        messageContainer.className = 'message ai';
+        messageContainer.dataset.model = modelName;
+        
+        // Get the static image for this AI
+        const imageFile = aiImages[modelName] || aiImages['Grok'] || 'grok1.jpeg';
+        
+        const avatarElement = document.createElement('div');
+        avatarElement.className = 'w-8 h-8 rounded-full bg-gray-600 mr-2 inline-block align-top ai-avatar';
+        avatarElement.style.backgroundImage = `url(/static/images/${imageFile})`;
+        avatarElement.style.backgroundSize = 'cover';
+        avatarElement.style.backgroundPosition = 'center';
+        avatarElement.title = modelName;
+        
+        const authorWrapper = document.createElement('div');
+        authorWrapper.className = 'inline-block';
+        
+        const author = document.createElement('div');
+        author.className = 'author text-green-400 block text-sm';
+        author.textContent = modelName;
+        
+        const content = document.createElement('div');
+        content.className = 'content streaming bg-gray-700 rounded-lg px-3 py-2 max-w-[80%]';
+        content.textContent = ''; // Start empty
+        
+        // Add a blinking cursor
+        const cursor = document.createElement('span');
+        cursor.className = 'cursor';
+        cursor.textContent = '|';
+        content.appendChild(cursor);
+        
+        authorWrapper.appendChild(author);
+        authorWrapper.appendChild(content);
+        
+        messageContainer.appendChild(avatarElement);
+        messageContainer.appendChild(authorWrapper);
+        
+        // Add to chat container
+        this.chatContainer.appendChild(messageContainer);
+        
+        // Scroll to the bottom
+        this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
+        
+        return messageContainer;
+    }
+
+    appendToStreamingMessage(modelName, chunk) {
+        const messageElement = this.modelMessages[modelName];
+        if (!messageElement) return;
+        
+        const content = messageElement.querySelector('.content');
+        if (!content) return;
+        
+        // Remove the cursor if present
+        const cursor = content.querySelector('.cursor');
+        if (cursor) {
+            content.removeChild(cursor);
+        }
+        
+        // Append the chunk
+        const text = document.createTextNode(chunk);
+        content.appendChild(text);
+        
+        // Re-add the cursor
+        const newCursor = document.createElement('span');
+        newCursor.className = 'cursor';
+        newCursor.textContent = '|';
+        content.appendChild(newCursor);
+        
+        // Scroll to the bottom
+        this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
+    }
+
+    completeStreamingMessage(modelName, fullResponse) {
+        const messageElement = this.modelMessages[modelName];
+        if (!messageElement) return;
+        
+        const content = messageElement.querySelector('.content');
+        if (!content) return;
+        
+        // Remove the streaming class and cursor
+        content.classList.remove('streaming');
+        const cursor = content.querySelector('.cursor');
+        if (cursor) {
+            content.removeChild(cursor);
+        }
+        
+        // Set the full response text
+        content.textContent = fullResponse;
+        
+        // Scroll to the bottom
+        this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
+    }
+
+    addTypingIndicator(modelName) {
+        // Create typing indicator
+        const indicatorContainer = document.createElement('div');
+        indicatorContainer.className = 'message typing-container';
+        indicatorContainer.dataset.model = modelName;
+        
+        const author = document.createElement('div');
+        author.className = 'author';
+        author.textContent = modelName;
+        
+        const indicator = document.createElement('div');
+        indicator.className = 'typing-indicator';
+        indicator.innerHTML = '<span></span><span></span><span></span>';
+        
+        indicatorContainer.appendChild(author);
+        indicatorContainer.appendChild(indicator);
+        
+        // Add to chat container
+        this.chatContainer.appendChild(indicatorContainer);
+        
+        // Scroll to the bottom
+        this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
+    }
+
+    removeTypingIndicator(modelName) {
+        const indicators = this.chatContainer.querySelectorAll(`.typing-container[data-model="${modelName}"]`);
+        indicators.forEach(indicator => {
+            indicator.remove();
+        });
+    }
+
+    removeAllTypingIndicators() {
+        const indicators = this.chatContainer.querySelectorAll('.typing-container');
+        indicators.forEach(indicator => {
+            indicator.remove();
+        });
+    }
+
+    continueDiscussion() {
+        if (!this.currentDiscussionId) {
+            console.error('No active discussion to continue');
+            return;
+        }
+        
+        // Show loading state
+        const continueButton = document.getElementById('continue-discussion-btn');
+        if (continueButton) {
+            continueButton.disabled = true;
+            continueButton.textContent = 'Continuing...';
+            continueButton.className = 'bg-gray-500 text-white py-2 px-4 rounded-lg';
+        }
+        
+        // Get active council members for showing typing indicators
+        const activeMembers = this.councilMembersUI.getActiveMembers();
+        
+        // Show a typing indicator for each active member
+        activeMembers.forEach(member => {
+            this.addTypingIndicator(member.id);
+        });
+        
+        // Get selected number of rounds
+        const rounds = parseInt(this.roundsSelector.value, 10) || 1;
+        
+        // Use streaming if available, otherwise fall back to regular endpoint
+        if (this.supportsEventSource) {
+            // Remove the button now that we're streaming
+            if (continueButton) {
+                continueButton.remove();
+            }
+            
+            // Set the flag to indicate we're continuing a discussion
+            this.isContinuingDiscussion = true;
+            
+            // Connect to the streaming endpoint
+            this.connectToStream(this.currentDiscussionId);
+            
+            // Reset the flag after connecting
+            setTimeout(() => {
+                this.isContinuingDiscussion = false;
+            }, 1000);
+        } else {
+            // Fallback to non-streaming API
+            fetch(`/api/discussions/${this.currentDiscussionId}/continue`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    rounds: rounds
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to continue discussion');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Remove typing indicators
+                this.removeAllTypingIndicators();
+                
+                if (data.status === 'success') {
+                    // Display the new results
+                    this.displayDiscussionResults({ [data.results.length - 1]: data.results[data.results.length - 1] });
+                } else {
+                    throw new Error(data.message || 'Failed to continue discussion');
+                }
+            })
+            .catch(error => {
+                console.error('Error continuing discussion:', error);
+                this.addMessage('system', 'System', `Error continuing discussion: ${error.message}`);
+            })
+            .finally(() => {
+                // Remove the button regardless of outcome
+                if (continueButton) {
+                    continueButton.remove();
+                }
+            });
+        }
     }
 
     async handleSendMessage() {
-        const messageText = this.userInput.value.trim();
+        const messageText = this.inputField.value.trim();
         if (!messageText) return;
 
+        // Display the user's message
+        this.addMessage('user', 'You', messageText);
+
         if (this.currentDiscussionId === null) {
+            // Start a new discussion if we don't have one
             await this.startNewDiscussion(messageText);
         } else {
+            // Continue the existing discussion
             await this.contributeToDiscussion(messageText);
         }
 
-        this.userInput.value = ''; // Clear input after processing
+        this.inputField.value = ''; // Clear input after processing
     }
 
     async contributeToDiscussion(message) {
@@ -554,9 +950,57 @@ class ChatInterface {
         }
     }
 
+    displayDiscussionResults(results) {
+        console.log("Displaying discussion results:", results);
+        
+        // Check for empty results
+        if (!results) {
+            console.warn("No results to display");
+            return;
+        }
+        
+        // Add all AI messages from the last round
+        const rounds = Object.keys(results);
+        if (rounds.length === 0) {
+            console.warn("No rounds in results");
+            return;
+        }
+        
+        // Get the last round
+        const lastRound = rounds[rounds.length - 1];
+        const roundMessages = results[lastRound];
+        
+        // Check if roundMessages is actually an array or object
+        console.log("Round messages type:", typeof roundMessages);
+        console.log("Round messages is array?", Array.isArray(roundMessages));
+        console.log("Round messages value:", roundMessages);
+        
+        // Safely iterate - handle both array and object formats
+        if (Array.isArray(roundMessages)) {
+            // If it's an array, iterate normally
+            roundMessages.forEach(message => {
+                const author = message.model;
+                const content = message.response;
+                this.addMessage('ai', author, content);
+            });
+        } else if (typeof roundMessages === 'object' && roundMessages !== null) {
+            // If it's an object (old format), iterate over key-value pairs
+            Object.entries(roundMessages).forEach(([author, content]) => {
+                this.addMessage('ai', author, content);
+            });
+        } else {
+            console.warn("Unexpected format for roundMessages:", roundMessages);
+        }
+        
+        // Add a continue button if this is an active discussion
+        if (this.currentDiscussionId) {
+            this.addContinueButton();
+        }
+    }
+
     addMessage(type, author, content) {
         const messageElement = document.createElement('div');
-        messageElement.classList.add('chat-message', `message-${type}`); // e.g., message-user, message-ai, message-system
+        messageElement.classList.add('chat-message', `message-${type}`);
         
         const authorElement = document.createElement('span');
         authorElement.classList.add('font-semibold');
@@ -568,26 +1012,25 @@ class ChatInterface {
         if (type === 'user') {
             messageElement.classList.add('text-right', 'mb-2');
             authorElement.classList.add('text-blue-400'); 
-            messageElement.appendChild(contentElement); // Content first for user
-            messageElement.appendChild(authorElement); // Author second
+            messageElement.appendChild(contentElement);
+            messageElement.appendChild(authorElement);
         } else if (type === 'ai') {
-            messageElement.classList.add('text-left', 'mb-4'); // More margin below AI messages
-            // Find member details to get sprite placeholder
-            const member = this.councilMembersUI.members.find(m => m.id === author);
-            const spriteIndex = this.councilMembersUI.members.findIndex(m => m.id === author);
-            const spriteFilename = member ? placeholderSprites[spriteIndex % placeholderSprites.length] : 'grok1.jpeg'; // Default sprite
+            messageElement.classList.add('text-left', 'mb-4');
+            
+            // Get the static image for this AI - ensure correct key lookup
+            const imageFile = aiImages[author] || aiImages['Grok'] || 'grok1.jpeg';
             
             const avatarElement = document.createElement('div');
-            avatarElement.classList.add('w-8', 'h-8', 'rounded-full', 'bg-gray-600', 'mr-2', 'inline-block', 'align-top');
-            avatarElement.style.backgroundImage = `url(/static/images/${spriteFilename})`;
+            avatarElement.classList.add('w-8', 'h-8', 'rounded-full', 'bg-gray-600', 'mr-2', 'inline-block', 'align-top', 'ai-avatar');
+            avatarElement.style.backgroundImage = `url(/static/images/${imageFile})`;
             avatarElement.style.backgroundSize = 'cover';
             avatarElement.style.backgroundPosition = 'center';
-            avatarElement.title = author; // Show name on hover
+            avatarElement.title = author;
             
             const messageContentWrapper = document.createElement('div');
             messageContentWrapper.classList.add('inline-block', 'bg-gray-700', 'rounded-lg', 'px-3', 'py-2', 'max-w-[80%]');
             
-            authorElement.classList.add('text-green-400', 'block', 'text-sm'); // Author name on top
+            authorElement.classList.add('text-green-400', 'block', 'text-sm');
             authorElement.textContent = author;
             contentElement.classList.add('text-gray-200');
             
@@ -596,12 +1039,11 @@ class ChatInterface {
             
             messageElement.appendChild(avatarElement);
             messageElement.appendChild(messageContentWrapper);
-
-        } else { // System messages
+        } else {
             messageElement.classList.add('text-center', 'text-gray-500', 'text-sm', 'my-2');
             authorElement.textContent = `[${author}]`;
             messageElement.appendChild(authorElement);
-            messageElement.appendChild(document.createTextNode(' ')); // Add space
+            messageElement.appendChild(document.createTextNode(' '));
             messageElement.appendChild(contentElement);
         }
 
@@ -609,48 +1051,53 @@ class ChatInterface {
         this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
     }
 
-    // Helper to get member sprite (Placeholder implementation)
-    // TODO: Enhance this later if needed
-    _getMemberSprite(memberId) {
-        const memberIndex = this.councilMembersUI.members.findIndex(m => m.id === memberId);
-         if (memberIndex !== -1) {
-             return placeholderSprites[memberIndex % placeholderSprites.length];
-         }
-         return placeholderSprites[0]; // Default
-    }
-
-    async sendMessage(message, activeModels) {
-        // This function seems deprecated by startNewDiscussion and handleSendMessage logic
-        // Keeping it here commented out for reference, might remove later.
-        /*
-// ... existing code ...
-
-        const response = await fetch('/api/discussions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            // Send message and active_models list
-            body: JSON.stringify({ message, active_models: activeModels }), 
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-            throw new Error(`Failed to send message: ${errorData.detail || response.statusText}`);
-        }
-
-        return response.json();
-        */
-    }
-
     updateInputPlaceholder() {
         if (this.currentDiscussionId === null) {
-            this.userInput.placeholder = "Start a new discussion by typing your topic here...";
+            this.inputField.placeholder = "Start a new discussion by typing your topic here...";
         } else {
-            this.userInput.placeholder = "Type your message to continue the discussion...";
+            this.inputField.placeholder = "Type your message to continue the discussion...";
             // Future Enhancement (Task 8c): Modify this when the 'Continue' button is added
             // e.g., "Type your message... or click 'Continue Discussion'"
         }
+    }
+
+    addContinueButton() {
+        // Check if a continue button already exists
+        if (document.getElementById('continue-discussion-btn')) {
+            return; // Don't add another one
+        }
+        
+        const buttonContainer = document.createElement('div');
+        buttonContainer.className = 'flex flex-col items-center my-4';
+        
+        const roundsInfo = document.createElement('div');
+        roundsInfo.className = 'text-sm text-gray-400 mb-2 text-center';
+        const selectedRounds = parseInt(this.roundsSelector.value, 10) || 1;
+        roundsInfo.textContent = `${selectedRounds} round(s) will be generated next`;
+        
+        const continueButton = document.createElement('button');
+        continueButton.id = 'continue-discussion-btn';
+        continueButton.className = 'bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500';
+        continueButton.textContent = 'Continue Discussion';
+        continueButton.setAttribute('aria-label', 'Continue the AI discussion without adding your own message');
+        continueButton.setAttribute('role', 'button');
+        continueButton.setAttribute('tabindex', '0');
+        
+        // Add event listeners for both click and keyboard events
+        continueButton.addEventListener('click', () => this.continueDiscussion());
+        continueButton.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                this.continueDiscussion();
+            }
+        });
+        
+        buttonContainer.appendChild(roundsInfo);
+        buttonContainer.appendChild(continueButton);
+        this.chatContainer.appendChild(buttonContainer);
+        
+        // Focus the button to make it immediately accessible via keyboard
+        continueButton.focus();
     }
 }
 

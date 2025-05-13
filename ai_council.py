@@ -4,7 +4,6 @@ from gemini import Gemini
 from grok import Grok
 from llama import Llama
 import time
-from startup import initial_prompt, follow_up_prompt, default_prompts, question
 
 # Define a mapping from model names to their classes
 MODEL_CLASSES = {
@@ -152,13 +151,14 @@ class AICouncil:
         if follow_up_prompt_template is not None:
             self.follow_up_prompt_template = follow_up_prompt_template
         
-    def discuss_topic(self, topic, rounds=3):
+    def discuss_topic(self, topic, rounds=1, verbose=False):
         """
         Facilitate a discussion among all AI models about a given topic
         
         Args:
             topic (str): The topic or problem to discuss
-            rounds (int): Number of discussion rounds
+            rounds (int): Number of discussion rounds (default is 1)
+            verbose (bool): If True, print responses to console (default is False)
             
         Returns:
             list: List of responses from each model in each round
@@ -175,9 +175,10 @@ class AICouncil:
         
         # Store the first response
         round_responses = {first_model_name: first_response}
-        print(f"\n{first_model_name}'s initial response:")
-        print(first_response)
-        print("-" * 80)
+        if verbose:
+            print(f"\n{first_model_name}'s initial response:")
+            print(first_response)
+            print("-" * 80)
         
         # Get responses from the remaining models in the first round
         remaining_models = list(self.models.keys())[1:]
@@ -187,24 +188,22 @@ class AICouncil:
             for prev_model, prev_response in round_responses.items():
                 context += f"\n{prev_model}: {prev_response}\n"
             
-            
             response = self.models[model_name].get_response(initial_prompt + context)
             round_responses[model_name] = response
-            print(f"\n{model_name}'s response:")
-            print(response)
-            print("-" * 80)
+            if verbose:
+                print(f"\n{model_name}'s response:")
+                print(response)
+                print("-" * 80)
         
         discussion.append(round_responses)
         
         # Subsequent rounds
         for round_num in range(1, rounds):
-            print(f"\nRound {round_num + 1}:")
+            if verbose:
+                print(f"\nRound {round_num + 1}:")
             
             # Create context from all previous responses in all rounds
-            context = "Previous discussion:\n"
-            for prev_round in discussion:
-                for model_name, response in prev_round.items():
-                    context += f"\n{model_name}: {response}\n"
+            context = self.get_discussion_context(discussion)
             
             # Get responses from all models in this round, one by one
             round_responses = {}
@@ -220,57 +219,71 @@ class AICouncil:
                 
                 response = model.get_response(follow_up_prompt)
                 round_responses[model_name] = response
-                print(f"\n{model_name}'s response:")
-                print(response)
-                print("-" * 80)
-                time.sleep(1)  # Small delay between models
+                if verbose:
+                    print(f"\n{model_name}'s response:")
+                    print(response)
+                    print("-" * 80)
+                # Remove delay when not in verbose mode
+                if verbose:
+                    time.sleep(1)  # Small delay between models
             
             discussion.append(round_responses)
-            time.sleep(1)  # Small delay between rounds
+            # Remove delay when not in verbose mode
+            if verbose:
+                time.sleep(1)  # Small delay between rounds
         
         return discussion
-
-def test():
-    # Example usage with individual system prompts
-    topic = """How can we improve the efficiency of renewable energy storage systems?
-Consider both technological and economic aspects."""
-    
-    # Define individual system prompts for each model
-    system_prompts = {
-        'ChatGPT': """You are participating in a collaborative discussion with other AI models.
-        Your goal is to contribute unique insights while building upon others' ideas.
-        Be constructive, specific, and focus on practical solutions.""",
-                
-        'Claude': """You are participating in a collaborative discussion with other AI models.
-        Your goal is to contribute unique insights while building upon others' ideas.
-        Be constructive, specific, and focus on practical solutions.
-        As Claude, you have particular expertise in ethical considerations.""",
-                
-        'Gemini': """You are participating in a collaborative discussion with other AI models.
-        Your goal is to contribute unique insights while building upon others' ideas.
-        Be constructive, specific, and focus on practical solutions.
-        As Gemini, you have particular expertise in multimodal analysis.""",
-                
-        'Grok': """You are participating in a collaborative discussion with other AI models.
-        Your goal is to contribute unique insights while building upon others' ideas.
-        Be constructive, specific, and focus on practical solutions.
-        As Grok, you have particular expertise in humor and unconventional approaches.""",
-                
-        'Llama': """You are participating in a collaborative discussion with other AI models.
-        Your goal is to contribute unique insights while building upon others' ideas.
-        Be constructive, specific, and focus on practical solutions.
-        As Llama, you have particular expertise in open-source approaches."""
-    }
-    
-    # Initialize with individual prompts
-    council = AICouncil(system_prompts)
-    
-    # Example of updating a single model's prompt
-    council.update_system_prompt('ChatGPT', "You are now a more focused expert on renewable energy.")
-    
-    # Run the discussion
-    discussion = council.discuss_topic(topic, rounds=3)
-    
-if __name__ == "__main__":
-    #test()
-    pass
+        
+    def get_discussion_context(self, discussion, user_contribution=None):
+        """
+        Create a context string from all previous rounds of discussion
+        
+        Args:
+            discussion (list): List of dictionaries containing model responses for each round
+            user_contribution (str, optional): If provided, adds user contribution to the context
+            
+        Returns:
+            str: Formatted context string for the next round
+        """
+        context = "Previous discussion:\n"
+        for round_results in discussion:
+            for model_name, response in round_results.items():
+                context += f"\n{model_name}: {response}\n"
+        
+        # Add user contribution if provided
+        if user_contribution:
+            context += f"\nUser contribution: {user_contribution}\n"
+            
+        return context
+        
+    def continue_discussion(self, discussion, active_models=None, user_contribution=None):
+        """
+        Continue an existing discussion by adding another round
+        
+        Args:
+            discussion (list): List of dictionaries containing model responses for each round
+            active_models (list, optional): List of model names to include in the round
+                                          If None, includes all available models
+            user_contribution (str, optional): Optional user contribution to add to context
+            
+        Returns:
+            dict: Dictionary mapping model names to their responses for this round
+        """
+        # If no active models specified, use all available models
+        if active_models is None:
+            active_models = list(self.models.keys())
+        
+        # Create context from all previous rounds
+        context = self.get_discussion_context(discussion, user_contribution)
+        
+        # Generate prompt for this round
+        follow_up_prompt = self.follow_up_prompt_template.format(context=context)
+        
+        # Get responses from active models for this round
+        round_responses = {}
+        for model_name in active_models:
+            if model_name in self.models:
+                response = self.models[model_name].get_response(follow_up_prompt)
+                round_responses[model_name] = response
+        
+        return round_responses

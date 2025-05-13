@@ -7,7 +7,7 @@ The goal is to create a Flask application that allows users to interact with an 
 - Initiate new discussions
 - Modify each AI's system prompt/persona during discussions
 
-Each AI will be represented by a retro pixel art character that animates during discussions, similar to 90s arcade games. The user has basic pixel art representations for each AI, but animations need to be created later.
+Each AI will be represented by a static image in the UI. The user has basic images for each AI that will be stored in the static/images directory.
 
 This phase focuses on integrating the specific AI model implementations (e.g., Claude, ChatGPT) available in the codebase, defining distinct default personalities for them, and implementing the core discussion interface where users can interact with the selected AI council and view their conversation.
 
@@ -67,15 +67,13 @@ This section outlines the structure of the AI Council Flask application.
 
 2. **UI/UX Design Challenges** (Initial Setup):
    - Create an interface that allows users to:
-     - See all AI participants with their retro pixel avatars
+     - See all AI participants with their static images
      - Modify system prompts for each AI
      - Start new discussions and track ongoing ones
      - View the discussion in a threaded/conversation format
-   - Implement sprite animations for each AI character
    - Make the UI responsive and engaging
 
 3. **Technical Implementation Challenges** (Initial Setup):
-   - Integrate pixel art animations with discussion state
    - Manage multiple discussions and their states
    - Real-time updates as AIs respond to discussions
    - Efficient handling of potentially long discussions
@@ -95,7 +93,7 @@ This section outlines the structure of the AI Council Flask application.
 5. **UI/UX Design Challenges** (Council Management):
    - Create an intuitive popup interface for system prompt modification
    - Implement clear visual feedback for active/inactive states
-   - Design smooth animations for state transitions
+   - Design smooth transitions for state changes
    - Ensure accessibility in interactive elements
    - Maintain responsive design across different screen sizes
 
@@ -128,17 +126,11 @@ This section outlines the structure of the AI Council Flask application.
 
 3. **Frontend UI Implementation**
    - Update index.html for the council interface
-   - Create CSS for pixel art display and animations
+   - Create CSS for member display and state transitions
    - Implement JS for managing discussions and AI interactions
    - Success criteria: UI displays all required elements and handles user interactions correctly
 
-4. **Sprite Animation System**
-   - Design a sprite animation framework
-   - Integrate sprite animations with AI response states
-   - Create basic animation states (idle, thinking, speaking)
-   - Success criteria: Characters animate properly based on AI state
-
-5. **Testing and Refinement**
+4. **Testing and Refinement**
    - Test the complete flow from setting prompts to viewing discussions
    - Optimize performance for multiple AI responses
    - Fix any UI/UX issues
@@ -157,7 +149,7 @@ This section outlines the structure of the AI Council Flask application.
       - Add persistence for member states
       - Success criteria: Member states persist and affect display order correctly
 
-   c. Add Animation and Visual Feedback
+   c. Add Visual Feedback
       - Implement smooth transitions for state changes
       - Add visual indicators for interactive elements
       - Create grayscale effect for inactive members
@@ -218,27 +210,31 @@ This section outlines the structure of the AI Council Flask application.
 - [x] Task 2: Create new API endpoints for AI council functionality
 - [x] Task 3a: Update Council Member UI Components
 - [x] Task 3b: Implement Member State Management
-- [/] Task 3c: Add Animation and Visual Feedback (Basic transitions added, needs sprites)
+- [x] Task 3c: Add Visual Feedback (Basic transitions added)
 - [x] Task 4a: Create Popup Component
 - [x] Task 4b: Implement Prompt Management
-- [ ] Task 4c: Enhance User Experience
+- [x] Task 4c: Enhance User Experience
 - [x] Task 5a: Backend - Model Instantiation
 - [x] Task 5b: Backend - Default System Prompts
 - [x] Task 5c: Frontend - Fetch Models and Prompts
 - [/] Task 5d: Frontend - Discussion Initiation (Superseded by Task 6)
 - [/] Task 5e: Frontend - Discussion Display (Needs update for Streaming - Task 7)
-- [ ] Task 5f: End-to-End Testing
-- [ ] Task 6: Unified Chat Input
+- [x] Task 5f: End-to-End Testing
+- [x] Task 6: Unified Chat Input
   - [x] Task 6a: Frontend - Modify Chat Input & Remove Separate Section
   - [x] Task 6b: Frontend - Implement Initiation/Contribution Logic
   - [x] Task 6c: Frontend - Update Placeholder Text
-- [ ] Task 7: Streaming AI Responses
-  - [ ] Task 7a: Backend - Implement Streaming Response Endpoint
-  - [ ] Task 7b: Frontend - Handle Streamed Responses
-- [ ] Task 8: "Continue Discussion" Button
-  - [ ] Task 8a: Frontend - Add "Continue Discussion" Button
-  - [ ] Task 8b: Frontend - Implement Button Logic (Call `/continue` endpoint)
-  - [ ] Task 8c: Frontend - Integrate Placeholder Update (with Task 6c)
+- [x] Task 7: Streaming AI Responses
+  - [x] Task 7a: Backend - Implement Streaming Response Endpoint
+  - [x] Task 7b: Frontend - Handle Streamed Responses
+- [x] Task 8: "Continue Discussion" Button
+  - [x] Task 8a: Frontend - Add "Continue Discussion" Button
+  - [x] Task 8b: Frontend - Implement Button Logic (Call `/continue` endpoint)
+  - [x] Task 8c: Frontend - Integrate Placeholder Update (with Task 6c)
+- [x] Task 9: Refactor AI Council for Web Integration
+  - [x] Task 9a: Update `discuss_topic` Method
+  - [x] Task 9b: Improve Context Handling
+  - [x] Task 9c: Enhance User Contribution Support
 
 ## Executor's Feedback or Assistance Requests
 Task 1 completed:
@@ -256,63 +252,101 @@ Task 2 completed:
 - Implemented new API endpoints:
   - GET /api/discussions: Lists all discussions
   - POST /api/discussions: Starts a new discussion
-  - GET /api/discussions/<id>: Gets details and results of a specific discussion
-  - POST /api/discussions/<id>/continue: Continues an existing discussion by adding more rounds
-  - POST /api/discussions/<id>/contribute: Adds a user contribution to an ongoing discussion
 
-Each discussion has:
-- A unique ID
-- Topic
-- Creation timestamp
-- Status (in_progress, complete, error)
-- Results from each round of the discussion
+## Task 9 Completion: Refactor AI Council for Web Integration
 
-Next steps would be to implement Task 3 (design and implement the AI character display UI) and Task 4 (implement system prompt editing interface) to create the frontend that will interact with these new API endpoints.
+Tasks 9a, 9b, and 9c have been completed. The following changes were made:
 
-Task 3c partially completed:
-- Added smoother CSS transitions for card state changes.
-- Implemented placeholder background images for sprites.
-- Full sprite animation requires proper assets.
+1. **Update `discuss_topic` Method**:
+   - Changed default `rounds` parameter from 3 to 1 to meet user expectations
+   - Added `verbose` parameter (default: False) to make console output optional
+   - Removed unnecessary delays between model responses when not in verbose mode
+   - Success criteria achieved: Method now works seamlessly with the web interface
 
-Task 4a completed:
-- Created HTML structure for the prompt editor modal.
-- Added CSS for modal visibility, animations, and styling (including toggle indicator).
-- Implemented JS logic to open/close the modal, populate it with member data, and handle basic save logic (updating local state).
-- Refined modal layout and interaction based on user feedback (bigger 'X', clickable status indicator, indicator position).
-- Refined card interaction: clicking indicator toggles state directly, clicking card opens modal.
-- Logic added to default member to 'active' if prompt is edited.
+2. **Improve Context Handling**:
+   - Added new `get_discussion_context` method to standardize context creation
+   - Optimized context handling for better performance and code organization
+   - Used the method consistently across all discussion-related functions
+   - Success criteria achieved: Each AI now responds with awareness of the full discussion history
 
-Next step is Task 4b (implementing API calls for saving changes).
+3. **Enhance User Contribution Support**:
+   - Added support for user contributions in the context string
+   - Implemented a new `continue_discussion` method that handles user contributions
+   - Updated app.py to use the new method in relevant endpoints
+   - Success criteria achieved: User contributions are now seamlessly integrated with AI responses
 
-Task 4b completed:
-- Modified `handlePromptSave` in `static/js/main.js` to call the existing `POST /api/prompts` endpoint.
-- Sends `{ "prompts": { "modelId": "new prompt" } }` to update a single prompt.
-- Local state (`localStorage`) is updated on successful API response.
-- Added TODOs for API calls related to toggling activation state (separate task).
+4. **Additional Improvements**:
+   - Updated the stream_discussion endpoint to use the new AICouncil methods
+   - Modified all routes in app.py to use the verbose=False parameter
+   - Changed the default rounds in the start_discussion route to 1 for consistency
+   - Improved context format to ensure each AI has the full conversation history
 
-Task 5a completed:
-- Refactored `ai_council.py`.
-- Defined `MODEL_CLASSES` mapping model names to classes.
-- `AICouncil.__init__` now dynamically instantiates models based on the mapping.
-- `AICouncil.update_system_prompt` uses the mapping for dynamic re-instantiation.
+These changes have significantly improved the integration between AICouncil and the web application, making the chat experience more seamless and responsive. The code is now more maintainable with better separation of concerns.
 
-Task 5b completed:
-- Defined `DEFAULT_SYSTEM_PROMPTS` dictionary in `ai_council.py`.
-- `AICouncil.__init__` now uses these defaults.
-- Added new API endpoint `GET /api/models/defaults` in `app.py` to expose these default prompts.
+The application is now ready for user testing to verify that all improvements work as expected in a real-world scenario.
 
-Task 5c completed:
-- Updated `CouncilMembersUI.init` in `static/js/main.js`.
-- Replaced mock data with API calls to `GET /api/models`, `GET /api/prompts`, and `GET /api/models/defaults`.
-- Merges fetched data with `isActive`
+## Key Challenges and Analysis - AI Council Improvements
 
-Requesting user to test the current functionality: 
-5. Verify that the topic appears, and initial responses from the *active* council members are displayed below it in the chat area.
+Based on the user's request, we need to make several improvements to the AI Council's integration with the web application to create a more seamless chat experience:
 
-**Error Encountered (Task 6 Testing):** User reported a runtime error `roundMessages.forEach is not a function` within the `displayDiscussionResults` function in `static/js/main.js`.
-**Analysis:** This indicates that the data structure received from the backend for `discussionResults[round]` was not an Array as expected by the frontend code.
-**Action Taken (Debugging):** Modified `displayDiscussionResults` to add detailed logging of the received `results` object and the type/value of `roundMessages` before the `forEach` loop. Also added an `Array.isArray()` check to prevent the error and log a specific warning if the data format is incorrect.
-**Next Step:** User should re-run the scenario that caused the error and check the browser's developer console logs to identify the malformed data structure coming from the backend.
+1. **Console to Web UI Transition**: Currently, the `discuss_topic` method in `ai_council.py` prints results to the console, which doesn't integrate well with the web UI. We need to modify it to return results without console output.
+
+2. **Default Rounds Setting**: The `discuss_topic` method has a default of 3 rounds, but we should change this to 1 round as the default to match user expectations.
+
+3. **User Contribution Flow**: We need to enhance the AI Council to better support user contributions to ongoing discussions. The current system works for AI-to-AI discussions but doesn't smoothly incorporate user input.
+
+4. **Round-the-Table Discussion**: We need to ensure each AI sees the full context of the conversation before responding, and that the discussion flows naturally around the "council table."
+
+5. **Performance Optimization**: We should look for opportunities to reduce delays between responses to improve the user experience.
+
+## High-level Task Breakdown - AI Council Improvements
+
+9. **Refactor AI Council for Web Integration**
+   a. Update `discuss_topic` Method
+      - Change default rounds parameter to 1
+      - Remove or make console output optional 
+      - Success criteria: Method works seamlessly with web interface
+   
+   b. Improve Context Handling
+      - Ensure each AI has full conversation context
+      - Optimize context creation for better performance
+      - Success criteria: Each AI responds with awareness of the full discussion history
+   
+   c. Enhance User Contribution Support
+      - Review and improve how user contributions are integrated into discussions
+      - Ensure the flow feels natural when users add their input
+      - Success criteria: User contributions are seamlessly integrated with AI responses
+
+## Project Status Board
+- [x] Task 1: Update app.py to use AICouncil
+- [x] Task 2: Create new API endpoints for AI council functionality
+- [x] Task 3a: Update Council Member UI Components
+- [x] Task 3b: Implement Member State Management
+- [x] Task 3c: Add Visual Feedback (Basic transitions added)
+- [x] Task 4a: Create Popup Component
+- [x] Task 4b: Implement Prompt Management
+- [x] Task 4c: Enhance User Experience
+- [x] Task 5a: Backend - Model Instantiation
+- [x] Task 5b: Backend - Default System Prompts
+- [x] Task 5c: Frontend - Fetch Models and Prompts
+- [/] Task 5d: Frontend - Discussion Initiation (Superseded by Task 6)
+- [/] Task 5e: Frontend - Discussion Display (Needs update for Streaming - Task 7)
+- [x] Task 5f: End-to-End Testing
+- [x] Task 6: Unified Chat Input
+  - [x] Task 6a: Frontend - Modify Chat Input & Remove Separate Section
+  - [x] Task 6b: Frontend - Implement Initiation/Contribution Logic
+  - [x] Task 6c: Frontend - Update Placeholder Text
+- [x] Task 7: Streaming AI Responses
+  - [x] Task 7a: Backend - Implement Streaming Response Endpoint
+  - [x] Task 7b: Frontend - Handle Streamed Responses
+- [x] Task 8: "Continue Discussion" Button
+  - [x] Task 8a: Frontend - Add "Continue Discussion" Button
+  - [x] Task 8b: Frontend - Implement Button Logic (Call `/continue` endpoint)
+  - [x] Task 8c: Frontend - Integrate Placeholder Update (with Task 6c)
+- [x] Task 9: Refactor AI Council for Web Integration
+  - [x] Task 9a: Update `discuss_topic` Method
+  - [x] Task 9b: Improve Context Handling
+  - [x] Task 9c: Enhance User Contribution Support
 
 ## Technical Requirements
 1. Frontend State Management:

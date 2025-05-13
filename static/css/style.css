@@ -67,54 +67,12 @@
 }
 
 .sprite-container {
-    image-rendering: pixelated;
-    background-size: contain;
+    background-size: cover;
     background-repeat: no-repeat;
     background-position: center;
     position: relative;
-}
-
-.sprite-container::after {
-    content: '';
-    position: absolute;
-    bottom: -8px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 80%;
-    height: 4px;
-    background: rgba(59, 130, 246, 0.5);
-    border-radius: 50%;
-    filter: blur(2px);
-}
-
-/* Animation States */
-.sprite-container[data-state="idle"] {
-    animation: idle 2s ease-in-out infinite;
-}
-
-.sprite-container[data-state="thinking"] {
-    animation: thinking 1s ease-in-out infinite;
-}
-
-.sprite-container[data-state="speaking"] {
-    animation: speaking 0.5s ease-in-out infinite;
-}
-
-/* Keyframe Animations */
-@keyframes idle {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-2px); }
-}
-
-@keyframes thinking {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-}
-
-@keyframes speaking {
-    0%, 100% { transform: translateX(0); }
-    25% { transform: translateX(-1px); }
-    75% { transform: translateX(1px); }
+    border-radius: 8px;
+    overflow: hidden;
 }
 
 /* Chat Container Styles */
@@ -178,6 +136,29 @@
 .message .content {
     color: rgba(255, 255, 255, 0.9);
     line-height: 1.5;
+}
+
+/* Streaming Message Styles */
+.content.streaming {
+    position: relative;
+}
+
+.content.streaming .cursor {
+    display: inline-block;
+    animation: blink 1s step-end infinite;
+    font-weight: 300;
+    color: rgba(255, 255, 255, 0.7);
+    margin-left: 2px;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+/* Typing Container */
+.typing-container {
+    opacity: 0.8;
 }
 
 /* Council Members Section */
@@ -289,4 +270,47 @@ input:checked ~ .block {
 
 #modal-status-indicator:hover {
     opacity: 0.8;
+}
+
+/* Added styles for rounds selector */
+.rounds-control {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    padding: 0.5rem 0;
+    border-radius: 0.5rem;
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.rounds-control label {
+    margin-right: 0.5rem;
+    font-size: 0.875rem;
+    color: #9ca3af;
+}
+
+.rounds-control select {
+    background-color: #374151;
+    color: #e5e7eb;
+    font-size: 0.875rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    border: 1px solid #4b5563;
+    outline: none;
+    cursor: pointer;
+}
+
+.rounds-control select:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+/* Enhanced AI avatar styles */
+.ai-avatar {
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s ease;
+}
+
+.ai-avatar:hover {
+    transform: scale(1.1);
 }

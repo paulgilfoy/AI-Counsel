@@ -12,29 +12,66 @@ class Grok:
             base_url="https://api.x.ai/v1",
         )
         
-    def get_response(self, prompt, stream=False):
+    def get_response(self, prompt):
         """
         Get a response from Grok using the X.AI API
         
         Args:
             prompt (str): The user's prompt
-            stream (bool): Whether to stream the response
             
         Returns:
-            str or generator: The model's response or a generator for streaming responses
+            str: The model's response
         """
-        messages = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": prompt},
-        ]
+        try:
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": prompt},
+            ]
+            
+            response = self.client.chat.completions.create(
+                model="grok-2-latest",
+                messages=messages,
+                stream=False
+            )
+            
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"Error getting response from Grok: {str(e)}"
+            
+    def get_streaming_response(self, prompt, callback=None):
+        """
+        Get a streaming response from Grok
         
-        response = self.client.chat.completions.create(
-            model="grok-2-latest",
-            messages=messages,
-            stream=stream
-        )
-        
-        if stream:
-            return response
-        else:
-            return response.choices[0].message.content 
+        Args:
+            prompt (str): The user's prompt
+            callback (callable): Function to call with each chunk of the response
+            
+        Returns:
+            str: The full model's response after streaming completes
+        """
+        try:
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": prompt},
+            ]
+            
+            stream = self.client.chat.completions.create(
+                model="grok-2-latest",
+                messages=messages,
+                stream=True
+            )
+            
+            full_response = ""
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    if callback:
+                        callback(content)
+                    full_response += content
+            
+            return full_response
+        except Exception as e:
+            error_msg = f"Error getting streaming response from Grok: {str(e)}"
+            if callback:
+                callback(error_msg)
+            return error_msg 
